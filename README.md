@@ -25,39 +25,32 @@ This workshop is designed for FinOps teams, Solution Architects, Oracle Partners
 
 ## Prerequisites
 
-AWS
-
-* An existing AWS Account or you must complete the AWS account setup lab.
-* An Amazon QuickSight Enterprise Edition Account. If you do not already have one follow instructions here.
-* Enough QuickSight SPICE capacity to accommodate your data set. To purchase SPICE, follow instructions here.
-* Complete the FOCUS setup - here. 
-    * The FOCUS framework will provide many of the necessary setup and resources which OCI FOCUS dashboard with increment.
-* Ability to run CloudFormation Template to deploy the CID OCI FOCUS stack
-* S3 Bucket for uploading some dependant artefacts
+**AWS**
+1. An existing **AWS Account** or you must complete the [AWS account setup lab.](https://wellarchitectedlabs.com/cost/100_labs/100_1_aws_account_setup/)
+2. Ability to run CloudFormation template to deploy the CID OCI FOCUS stack
+3. An Amazon **QuickSight Enterprise Edition Account**. If you do not already have one follow instructions [here.](https://aws.amazon.com/premiumsupport/knowledge-center/quicksight-enterprise-account/)
+4. Enough **QuickSight SPICE capacity** to accommodate your data set. To purchase SPICE, follow instructions [here.](https://docs.aws.amazon.com/quicksight/latest/user/managing-spice-capacity.html#spice-capacity-purchasing)
 
 
-OCI
 
-* Required IAM Policy - In your Tenancy you will need to define a Policy Statement for Cost and Usage reporting. Below is the current recommended policy. Change only Identity Group. Follow OCI guide here
+**Oracle Cloud Ifrastructure**
+1. **IAM Policy** - To allow access to CUR objects in OCI Tenancy. Keep a Note of the Tenancy OCID for later use.
+In your Tenancy you will need to define a Policy Statement for Cost and Usage reporting. Below is the current recommended policy. Change only Identity Group. Follow OCI guide [here.](https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/costusagereportsoverview.htm#policy)
 
-define tenancy usage-report as ocid1.tenancy.oc1..aaaaaaaaned4fkpkisbwjlr56u7cj63lf3wffbilvqknstgtvzub7vhqkggq
-endorse group <group> to read objects in tenancy usage-report
+2. **Cost and Usage Reports** - Cost and usage reports are comma-separated value (CSV) files that are generated daily and stored in an Object Storage bucket. By default this will be a Oracle owned Object Storage bucket, but you can also download to another Object storage bucket owned by you. Follow OCI guide here (https://www.ateam-oracle.com/post/automating-the-export-of-oci-finops-open-cost-and-usage-specification-focus-reports-to-object-storage). 
 
-* This example has a specific tenancy OCID, because the reports are stored in an Oracle-owned Object Storage bucket hosted by Oracle Cloud Infrastructure, and not a customer's tenancy.
-* Customer Secret - You can follow the OCI guide here. Ensure to have the user added in the Group mentioned in the policy
-* Check the FOCUS Reports are accessible.
-    * Click Billing and Cost Management. Under Cost Management, click Cost and Usage Reports. 
-    * Follow the guide here
-*  
+3. **Customer Secret Keys** - To allow API based access to your OCI resources. You can follow the OCI guide [here.](https://docs.oracle.com/en-us/iaas/Content/Identity/Tasks/managingcredentials.htm#)
 
+3. **Authentication and Authorization** - An administrator in your organization needs to set up groups, compartments, and policies  that control which users can access which services, which resources, and the type of access. Follow the OCI guide [here.](https://docs.oracle.com/en-us/iaas/Content/Billing/Concepts/costusagereportsoverview.htm#auth)
+
+4. **Tenancy Information** - If using the Oracle owned Objectstorage for Cost and Usage Report use namespace called **bling**. If you are using a different Objectstorage bucket, use the appropriate namespace. Follow the OCI guide [here.](https://docs.oracle.com/en-us/iaas/compute-cloud-at-customer/topics/object/obtaining-the-object-storage-namespace.htm). Also collect the **home region** of tenancy to know which Objectstorage endpoint to use. 
 
 Once you've setup OCI, you'll have the following information and are ready to start the workshop:
 
-    * OCI ObjecStorage Endpoint URL: https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
-    * OCI Tenancy Unique ID (OCID)
-    * OCI Secret Access Key
-    * OCI Secret Access Secret
-* 
+- [x] ObjecStorage Endpoint URL: https://**[namespace]**.compat.objectstorage.**[region]**.oraclecloud.com 
+- [x] OCI Tenancy Unique ID (OCID)
+- [x] OCI Secret Access Key
+- [x] OCI Secret Access Secret
 
 
 ## References:

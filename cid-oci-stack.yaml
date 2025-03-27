@@ -1827,7 +1827,7 @@ Resources:
       Timeout: 60
       Command:
         Name: glueetl
-        ScriptLocation: !Sub "s3://${ArtifactBucket}/scripts/oci-focus-csv-to-parquet-glue.py"
+        ScriptLocation: !Sub "s3://${ArtifactBucket}/glue-scripts/oci-focus-csv-to-parquet-glue.py"
         PythonVersion: "3"
       DefaultArguments:
         --source_bucket: !Ref OCIrawS3Bucket
@@ -1870,7 +1870,7 @@ Resources:
       Timeout: 60
       Command:
         Name: glueetl
-        ScriptLocation: !Sub "s3://${ArtifactBucket}/scripts/oci-standard-csv-to-parquet-glue.py"
+        ScriptLocation: !Sub "s3://${ArtifactBucket}/glue-scripts/oci-standard-csv-to-parquet-glue.py"
         PythonVersion: "3"
       DefaultArguments:
         --source_bucket: !Ref OCIrawS3Bucket
