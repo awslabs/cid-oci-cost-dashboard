@@ -1,0 +1,2515 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This CloudFormation Template deploys the AWS CID Integration for OCI Focus
+
+### Cloudformation Stack details menu
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: CID Settings
+        Parameters:
+          - SourceBucket
+          - PrefixCode
+          - EnvironmentCode
+          - OwnerTag
+          - EnvironmentTag
+      - Label:
+          default: OCI Integration Settings
+        Parameters:
+          - OracleRegion
+          - OracleEndpointURL
+          - OracleTenancyOCID
+          - OCISecretAccessKeyID
+          - OCISecretAccessKey
+      - Label:
+          default: Data Copy Settings
+        Parameters:
+          - OCIToS3SyncDuration
+          - OCICopySchedule
+          - OCIToS3SyncStartDate
+          - OCIExportAutoTriggeronUpdate
+          - OCIFocusExport
+          - OCIStandardExport
+          - OCICopyFileExtension
+      - Label:
+          default: Data ETL configurations
+        Parameters:
+          - CidOciFocusGlueCopySchedule
+          - CidOciFocusGlueETLSourcePrefix
+          - CidOciFocusGlueETLTargetPrefix
+          - CidOciFocusPrefix
+          - CidOciFocusGlueTable
+          - CidOciFocusNonISODateFormat
+          - CidOciStandardGlueCopySchedule
+          - CidOciStandardGlueETLSourcePrefix
+          - CidOciStandardGlueETLTargetPrefix
+          - CidOciStandardPrefix
+          - CidOciStandardGlueTable
+          - CidOciStandardNonISODateFormat
+          - QuickSightServiceRole
+      - Label:
+          default: Advanced Settings (DO NOT CHANGE)
+        Parameters:
+          - PartitionSize
+          - MaxPartitionsPerFile
+          - UseFullFilePath
+
+Parameters:
+  # Environment params for multiple setups  
+  PrefixCode:
+    Description: Prefix used to name all resources created by this CloudFormation template. Use 3 alphanumeric characters only. Cannot be 'aws'. e.g. department name, business unit, project name
+    Type: String
+    Default: cid-oci
+  EnvironmentCode:
+    Type: String
+    Default: prod
+    Description: Code used to name all resources created by this CloudFormation template. Use 2 alphanumeric characters only. E.g. 'pd' for production
+  OwnerTag:
+    Type: String
+    Default: CFM
+    Description: Owner tag value. All resources are created with an 'Owner' tag and the value you set here. e.g. finops, devops, IT shared services, etc.
+  EnvironmentTag:
+    AllowedValues:
+      - Production
+      - Staging
+      - Test
+      - Development
+    Type: String
+    Default: Production
+    Description: Environment tag value. All resources are created with an 'Environment' tag and the value you set here. e.g. production, staging, development
+  
+  # OCI Integration Settings
+  OracleRegion: 
+    Description: Oracle API Region. Example ap-hyderabad-1|ap-mumbai-1|us-phoenix-1
+    Default: "ap-hyderabad-1"
+    Type: String  
+  OracleEndpointURL:
+    Description: S3 Compatible regional OCI endpoint. Namespace=bling for OCI owned, else customer objectstorage namespace
+    Default: https://<namespace>.compat.objectstorage.<oci-region-id>.oraclecloud.com
+    Type: String
+  OracleTenancyOCID:
+    Description: Oracle / Customer tenancy OCID. Enter based on ownership of source OCI Objectstorage bucket.
+    Default: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    Type: String
+    NoEcho: true
+  OCISecretAccessKeyID:
+    Description: OCI API user secret key id
+    Default: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    Type: String
+    NoEcho: true
+  OCISecretAccessKey:
+    Description: OCI API user secret
+    Default: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    Type: String
+    NoEcho: true
+
+  # Data Copy Parameters
+  OCIFocusExport:
+    Description: Include OCI default FOCUS reports ?
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+  OCIStandardExport:
+    Description: Include OCI default Cost and Usage reports ?
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+  OCIExportAutoTriggeronUpdate:
+    Description: Do you want to enable auto trigger of data pull on based on CFN Create or Update ?
+    Type: String
+    Default: "Yes"
+    AllowedValues:
+      - "Yes"
+      - "No"
+  OCICopySchedule:
+    Description: Scheduled time (UTC) for OCI data pull. Must be a CRON expression. The default sets the schedule to 3am daily
+    Type: String
+    Default: "cron(0 3 * * ? *)"
+  OCIToS3SyncStartDate:
+    Description: Minimum age of the objects to be copied. Must be a valid format (YYYYMMDD)
+    Type: String
+    Default: "20220820"
+  OCIToS3SyncDuration:
+    Description: The number of days to look for the sync to handle
+    Type: Number
+    Default: 30
+    MinValue: 1
+  # Add Parameter to include a list of file extension
+  OCICopyFileExtension:
+    Description: The file extension to filter the OCI data pull. Must be a valid format (e.g. .csv.gz is default)
+    Type: String
+    Default: ".csv.gz"
+  QuickSightServiceRole:
+    Description: IAM Role used by QuickSight to access CID Dashboards
+    Default: "CidQuickSightDataSourceRole"
+    Type: String  
+
+  # Advanced Parameters
+  PartitionSize:
+    Description: Multipart upload partition size in bytes
+    Default: "104857600"
+    Type: String
+  MaxPartitionsPerFile:
+    Description: The maximum amount of partitions to create for each multi part file. Must be an integer between 5 and 10000
+    Default: "100"
+    Type: String
+  UseFullFilePath:
+    Description: Retain OCI storage path
+    AllowedValues:
+      - true
+      - false
+    Default: "true"
+    Type: String
+
+  # Glue ETL parameters and configurations
+  CidOciFocusGlueCopySchedule:
+    Description: Scheduled time (UTC) for OCI data pull. Must be a CRON expression. The default sets the schedule to 5am daily
+    Type: String
+    Default: "cron(0 5 * * ? *)"
+  CidOciFocusGlueETLSourcePrefix:
+    Description: Prefix to look for inside source bucket for csv files. Donot change unless different from default.
+    Type: String
+    Default: "FOCUS Reports/*/*/*/*"  
+  CidOciFocusGlueETLTargetPrefix:
+    Description: Prefix to store the Parquest files in destination bucket. Donot change unless different from default.
+    Type: String
+    Default: "FOCUS-Parquet"
+  CidOciFocusPrefix:
+    Description: Prefix to Indicate the high level folder for FOCUS Cost and Usage Reports will be placed in Bucket. Donot change unless different from default.
+    Type: String
+    Default: "FOCUS Reports"
+  CidOciFocusGlueTable:
+    Description: AWS Glue Table name for quering the OCI CUR FOCUS Data.
+    Type: String
+    Default: "focus-oci"
+  CidOciFocusNonISODateFormat:
+    Description: Date format for Non ISO Timestamp formats. Do not change unless a different format is being used.
+    Type: String
+    Default: "yyyy-MM-dd'T'HH:mm'Z'"    
+
+  CidOciStandardGlueCopySchedule:
+    Description: Scheduled time (UTC) for OCI data pull. Must be a CRON expression. The default sets the schedule to 5am daily
+    Type: String
+    Default: "cron(0 5 * * ? *)"
+  CidOciStandardGlueETLSourcePrefix:
+    Description: Prefix to look for inside source bucket for csv files. Donot change unless different from default.
+    Type: String
+    Default: "/reports/cost-csv/*"  
+  CidOciStandardPrefix:
+    Description: Prefix to Indicate the high level folder for Standard Cost and Usage Reports will be placed in Bucket. Donot change unless different from default.
+    Type: String
+    Default: "reports/cost-csv"
+  CidOciStandardGlueETLTargetPrefix:
+    Description: Prefix to store the Parquest files in destination bucket. Donot change unless different from default.
+    Type: String
+    Default: "/Standard-Parquet/"
+  CidOciStandardGlueTable:
+    Description: AWS Glue Table name for quering the OCI CUR FOCUS Data.
+    Type: String
+    Default: "standard-oci"
+  CidOciStandardNonISODateFormat:
+    Description: Date format for Non ISO Timestamp formats. Do not change unless a different format is being used.
+    Type: String
+    Default: "yyyy-MM-dd'T'HH:mm'Z'"    
+
+#Conditions for Parameters. 
+Conditions:
+  IsOracleRegionBlank: !Equals [!Ref OracleRegion, ""]
+  IsOracleEndpointURLBlank: !Equals [!Ref OracleEndpointURL, ""]
+  IsOracleTenancyOCIDBlank: !Equals [!Ref OracleTenancyOCID, ""]
+  IsOCISecretAccessKeyIDBlank: !Equals [!Ref OCISecretAccessKeyID, ""]
+  IsOCISecretAccessKeyBlank: !Equals [!Ref OCISecretAccessKey, ""]
+  IsOCICopyScheduleBlank: !Equals [!Ref OCICopySchedule, ""]
+  IsOCIToS3SyncStartDateBlank: !Equals [!Ref OCIToS3SyncStartDate, ""]
+  IsPartitionSizeBlank: !Equals [!Ref PartitionSize, ""]
+  IsMaxPartitionsPerFileBlank: !Equals [!Ref MaxPartitionsPerFile, ""]
+  IsUseFullFilePathBlank: !Equals [!Ref UseFullFilePath, ""]
+  #IsAllParametersBlank: !And [!Condition IsOracleRegionBlank, !Condition IsOracleEndpointURLBlank, !Condition IsOracleTenancyOCIDBlank, !Condition IsOCISecretAccessKeyIDBlank, !Condition IsOCISecretAccessKeyBlank, !Condition IsOCICopyScheduleBlank, !Condition IsOCIToS3SyncStartDateBlank, !Condition IsPartitionSizeBlank, !Condition IsMaxPartitionsPerFileBlank, !Condition IsUseFullFilePathBlank]
+  IsOCIStandardExportYes: !Equals [!Ref OCIStandardExport, "Yes"]
+  IsOCIFocusExportYes: !Equals [!Ref OCIFocusExport, "Yes"]
+  IsOCIExportAutoTriggeronUpdateYes: !Equals [!Ref OCIExportAutoTriggeronUpdate, "Yes"]
+  IsAnyExportTypeSelectedYes: !Or [!Condition IsOCIStandardExportYes, !Condition IsOCIFocusExportYes]
+  IsOCIExportAutoTriggeronUpdateFocus: !And [!Condition IsOCIExportAutoTriggeronUpdateYes, !Condition IsOCIFocusExportYes]
+  IsOCIExportAutoTriggeronUpdateStandard: !And [!Condition IsOCIExportAutoTriggeronUpdateYes, !Condition IsOCIStandardExportYes]
+
+Resources:
+  #Resource Group for CloudFormation deployed resources
+  ResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name: !Sub ${PrefixCode}-resources-${EnvironmentCode}
+      Description: CID OCI FOCUS resource group
+      ResourceQuery:
+        Type: TAG_FILTERS_1_0
+        Query:
+          ResourceTypeFilters:
+            - AWS::AllSupported
+          TagFilters:
+            - Key: Provisioner
+              Values:
+                - CFN
+            - Key: Owner
+              Values:
+                - !Sub ${OwnerTag}
+            - Key: Environment
+              Values:
+                - !Sub ${EnvironmentTag}
+            - Key: Solution
+              Values:
+                - cid-oci
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: scaffold
+        - Key: Name
+          Value: !Sub ${PrefixCode}-resources-${EnvironmentCode}
+
+  KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Cloud Intelligence Dashboard for OCI KMS Key
+      PendingWindowInDays: 7
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            # https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action:
+              - kms:*
+            Resource:
+              - "*"
+          - Sid: Enable Cloudwatch access to KMS Key
+            # https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html
+            Effect: Allow
+            Principal:
+              Service: !Sub logs.${AWS::Region}.amazonaws.com
+            Action:
+              - kms:Encrypt*
+              - kms:Decrypt*
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:Describe*
+            Resource:
+              - "*"
+            Condition:
+              ArnLike:
+                "kms:EncryptionContext:aws:logs:arn": !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*"
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: security
+        - Key: Name
+          Value: !Sub ${PrefixCode}-kms-${EnvironmentCode}
+  KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${PrefixCode}-kms-${EnvironmentCode}
+      TargetKeyId: !Ref KMSKey
+
+  #Secrets Manager to store OCI data
+  OCISecretsManager:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${PrefixCode}-secrets-${EnvironmentCode}
+      Description: OCI ObjectStorage connectivity secrets
+      KmsKeyId: !GetAtt KMSKey.Arn
+      SecretString: !Sub |
+        {
+          "oracle_bucket": "${OracleTenancyOCID}",
+          "oracle_endpoint_url": "${OracleEndpointURL}",
+          "oracle_region": "${OracleRegion}",
+          "oracle_access_key_id": "${OCISecretAccessKeyID}",
+          "oracle_secret_access_secret": "${OCISecretAccessKey}"
+        }
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: code
+        - Key: Name
+          Value: !Sub ${PrefixCode}-secrets-${EnvironmentCode}
+
+  #S3 bucket to receive data
+  OCIrawS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete # Change as appropriate
+    Properties:
+      BucketName: !Sub ${PrefixCode}-bucket-rawdata-${EnvironmentCode}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref KMSKeyAlias
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: storage
+        - Key: Name
+          Value: !Sub ${PrefixCode}-bucket-${EnvironmentCode}-${AWS::AccountId}${AWS::Region}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W35'
+            reason: "Data buckets would generate too much logs"
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3045 # Need to use AccessControl for replication
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Data buckets would generate too much logs. Need to keep low cost"
+
+  OCIrawS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref OCIrawS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow HTTPS only
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Allow TLS 1.2 and above
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  DestinationS3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete # Change as appropriate
+    Properties:
+      BucketName: !Sub ${PrefixCode}-bucket-formatted-${EnvironmentCode}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref KMSKeyAlias
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: storage
+        - Key: Name
+          Value: !Sub ${PrefixCode}-bucket-formatted-${EnvironmentCode}-${AWS::AccountId}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W35'
+            reason: "Data buckets would generate too much logs"
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3045 # Need to use AccessControl for replication
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Data buckets would generate too much logs. Need to keep low cost"
+
+  DestinationS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DestinationS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow HTTPS only
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Allow TLS 1.2 and above
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete # Change as appropriate
+    Properties:
+      BucketName: !Sub ${PrefixCode}-bucket-atf-${EnvironmentCode}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: storage
+        - Key: Name
+          Value: !Sub ${PrefixCode}-bucket-atf-${EnvironmentCode}-${AWS::AccountId}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W35'
+            reason: "Data buckets would generate too much logs"
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W3045 # Need to use AccessControl for replication
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Data buckets would generate too much logs. Need to keep low cost"
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: Allow HTTPS only
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Allow TLS 1.2 and above
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - s3:*
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/*
+            Condition:
+              NumericLessThan:
+                s3:TlsVersion: 1.2
+
+  #SQS Queue (Standard)
+  CidOciFocusSQSQueue:
+    Condition: IsAnyExportTypeSelectedYes
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${PrefixCode}-sqs-${EnvironmentCode}
+      DelaySeconds: 0 #0 to 900 (15 minutes). The default value is 0.
+      VisibilityTimeout: 2400 # 0 to 43,200 secords (12 hours)
+      MessageRetentionPeriod: 345600  # 4 days
+      ReceiveMessageWaitTimeSeconds: 20  # Enable long polling
+      MaximumMessageSize: 262144  # 256 KB
+      #SqsManagedSseEnabled: true  # Enable server-side encryption 
+      KmsMasterKeyId: !Ref KMSKey  # Reference to your KMS key
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CidOciFocusSQSQueueDLQ.Arn
+        maxReceiveCount: 3     
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: messaging
+        - Key: Name
+          Value: !Sub ${PrefixCode}-sqs-${EnvironmentCode}
+
+  #DLQ for the SQS Queue
+  CidOciFocusSQSQueueDLQ:
+    Condition: IsAnyExportTypeSelectedYes
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${PrefixCode}-sqs-dlq-${EnvironmentCode}
+      DelaySeconds: 0 #0 to 900 (15 minutes). The default value is 0.
+      VisibilityTimeout: 900 # 0 to 43,200 secords (12 hours)
+      MessageRetentionPeriod: 1209600  #14 days
+      #SqsManagedSseEnabled: true  # Enable server-side encryption 
+      KmsMasterKeyId: !Ref KMSKey  # Reference to your KMS key 
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: messaging
+        - Key: Name
+          Value: !Sub ${PrefixCode}-sqs-dlq-${EnvironmentCode}
+  CidOciFocusQueuePolicy:
+    Condition: IsAnyExportTypeSelectedYes
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref CidOciFocusSQSQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSendMessage
+            Effect: Allow
+            Principal:
+              AWS: !Sub '${AWS::AccountId}'
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Resource: !GetAtt CidOciFocusSQSQueue.Arn
+
+  #IAM configuration used throughout stack
+  LambdaIAM:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: CID OCI FOCUS IAM role for Lambda Functions to copy objects from OCI to S3
+      RoleName: !Sub ${PrefixCode}iar${EnvironmentCode}cidocifocuslambda
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}iap${EnvironmentCode}cidocifocuslambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:GetObjectAcl
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:ListMultipartUploadParts
+                  - s3:AbortMultipartUpload
+                  - s3:CreateBucket
+                  - s3:Put*
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}
+                  - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}/*
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt CidOciFocusSQSQueue.Arn
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  - !GetAtt KMSKey.Arn
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecretVersionIds
+                  - secretsmanager:UpdateSecret
+                Resource:
+                  - !Ref OCISecretsManager
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W28'
+            reason: "Need an explicit name for reference"
+          - id: 'W11'
+            reason: "Some COH resources cannot be restricted"
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: security
+        - Key: Name
+          Value: !Sub ${PrefixCode}iar${EnvironmentCode}cidocifocuslambda
+
+  CIDOCISyncToS3LambdaFocus:
+    Condition: IsOCIFocusExportYes
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${PrefixCode}-lambda-focus-${EnvironmentCode}
+      Description: Initial Lambda to list OCI FOCUS Cost and Usage Report files to be download of FOCUS solution
+      Role: !GetAtt LambdaIAM.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import datetime
+          import json
+          import logging
+          import urllib3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def send_response(event, context, response_status, response_data):
+              response_body = {
+                  'Status': response_status,
+                  'Reason': f'See CloudWatch Log Stream: {context.log_stream_name}',
+                  'PhysicalResourceId': context.log_stream_name,
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': response_data
+              }
+              
+              response_body = json.dumps(response_body)
+              logger.info(f"Response body: {response_body}")
+              
+              http = urllib3.PoolManager()
+              try:
+                  response = http.request(
+                      'PUT',
+                      event['ResponseURL'],
+                      headers={'Content-Type': ''},
+                      body=response_body
+                  )
+                  logger.info(f"Status code: {response.status}")
+              except Exception as e:
+                  logger.info(f"Error sending response: {str(e)}")
+                  raise
+
+          def get_all_s3_objects(s3Client, bucket_name, prefix):
+              s3_client = s3Client
+              all_objects = []
+              paginator = s3_client.get_paginator('list_objects_v2')
+              
+              for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+                  if 'Contents' in page:
+                      all_objects.extend(page['Contents'])
+                      print(f"Number of Objects found in this page = {page['KeyCount']}")
+                      #print(f"Contents found in Bucket: {page['Contents']} ")
+              return all_objects
+
+          #Write code for a function that accepts a string array of secret keys and return secret values in key pair format of secret
+          # key and secret value. The secret name is oci-secrets
+          def get_secrets(SecretId):
+              secretresponses = {}
+              client = boto3.client('secretsmanager')
+              response = client.get_secret_value(SecretId=SecretId)
+              secrets = response['SecretString']
+              
+              # Parse the JSON string from SecretString 
+              secret_dict = json.loads(secrets)
+              
+              return secret_dict
+
+          def store_run_status(dynamodb_table_name, run_id, run_status):
+                  # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+              
+              # Create the DynamoDB table if it does not exist
+              try:
+                  dynamodb.describe_table(TableName=dynamodb_table_name)
+              except dynamodb.exceptions.ResourceNotFoundException:
+                  dynamodb.create_table(
+                      TableName=dynamodb_table_name,
+                      KeySchema=[
+                          {
+                              'AttributeName': 'file_name',
+                              'KeyType': 'HASH'
+                          }
+                      ],
+                      AttributeDefinitions=[
+                          {
+                              'AttributeName': 'file_name',
+                              'AttributeType': 'S'
+                          }
+                      ],
+                      ProvisionedThroughput={
+                          'ReadCapacityUnits': 5,
+                          'WriteCapacityUnits': 5
+                      }
+                  )
+              # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+
+              # Get the current timestamp
+              timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+              # Prepare the item to be stored in DynamoDB
+              item = {
+                  'run_id': {'S': run_id},
+                  'run_status': {'S': run_status},
+                  'timestamp': {'S': timestamp}
+              }
+
+              # Store the item in DynamoDB
+              dynamodb.put_item(TableName=dynamodb_table_name, Item=item)
+
+          def print_files_s3bucket(s3_client, bucket_name, Prefix):
+              response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=Prefix)
+              print("Files found in Bucket: "+bucket_name+" are: ")
+              if 'Contents' in response:
+                  for obj in response['Contents']:
+                      #Print both the file name, path and the last modified date
+                      print(obj['Key'], obj['Size'], obj['LastModified'])
+              else:
+                  print("No files found in the bucket "+bucket_name)    
+
+          def lambda_handler(event, context):
+              
+              #add a variable (boolean) for sending response back or not
+              send_response_back = False
+              if 'ResponseURL' in event:
+                  send_response_back = True
+
+              logger.info(f"Received event: {json.dumps(event)}")
+
+              try:
+                  if event['RequestType'] == 'Delete':
+                      # Handle stack deletion - cleanup if needed
+                      logger.info("Handling Delete request")
+                      send_response(event, context, 'SUCCESS', {'Message': 'Resource Deletion not in Scope'})
+                      return
+
+                  if event['RequestType'] in ['Create', 'Update']:
+                      # Get parameters from the event
+                      props = event['ResourceProperties']
+                      # Add your OCI to S3 sync logic here
+                      logger.info("Executing CFN trigger OCI to S3 sync...")
+
+                  #Handle event request type = Scheduled
+                  if event['RequestType'] == 'Scheduled':
+                      logger.info("Executing Scheduled Run for OCI to S3 sync...")
+
+                  ##checkov:skip=CKV_SECRET_6: Base64 High Entropy String
+                  cid_oci_secrets_name = os.environ['OracleSecretName']
+                  cid_oci_raw_s3 = os.environ['OciRawDataS3Bucket']
+                  cid_oci_s3_sync_start_date = os.environ['OCIToS3SyncStartDate']
+                  cid_oci_endpoint_url = os.environ['OracleEndpointURL']
+                  cid_oci_region = os.environ['OracleRegion']
+                  cid_oci_file_extension = os.environ['OCICopyFileExtension']
+                  cid_oci_sync_duration = os.environ['OCIToS3SyncDuration']
+                  cid_oci_sqs_queue = os.environ['OCISQSQueue']
+                  cid_oci_export_focus = os.environ['OCIFocusExport']
+                  cid_oci_export_standard = os.environ['OCIStandardExport']
+
+                  #Get Secret from CID OCI Secrets Manager
+                  cid_oci_secrets = get_secrets(cid_oci_secrets_name)
+                  # print(cid_oci_secrets)
+                  cid_oci_access_key_id = cid_oci_secrets['oracle_access_key_id']
+                  cid_oci_secret_access_key = cid_oci_secrets['oracle_secret_access_secret']
+                  cid_oci_bucket = cid_oci_secrets['oracle_bucket']
+
+                  # Check if the secret is valid
+                  if cid_oci_access_key_id is None or cid_oci_secret_access_key is None:
+                      print("Invalid secret.")
+                      return
+                          
+                  # Get the AWS Raw bucket Details
+                  s3_aws = boto3.client('s3')
+                  print_files_s3bucket(s3_aws, cid_oci_raw_s3, "")
+
+                  s3_oci = boto3.client('s3',
+                                          endpoint_url=cid_oci_endpoint_url,
+                                          region_name=cid_oci_region,
+                                          aws_access_key_id=cid_oci_access_key_id,
+                                          aws_secret_access_key=cid_oci_secret_access_key)
+                  
+                  #Check to download FOCUS / Stanard / Both 
+                  Prefix =  "FOCUS Reports/"
+                  # print(f"DEBUG ---- {cid_oci_export_focus},{cid_oci_export_standard}")
+                  # if cid_oci_export_focus == 'Yes' and cid_oci_export_standard == 'Yes':
+                  #     Prefix = ""
+                  # elif cid_oci_export_focus == 'Yes':
+                  #     Prefix =  "FOCUS Reports/"
+                  # elif cid_oci_export_standard == 'Yes':
+                  #     Prefix = "reports/"
+                  
+                  # oci_result = s3_oci.list_objects(Bucket=cid_oci_bucket, Prefix=Prefix)
+                  # oci_files = oci_result.get("Contents")
+                  oci_files = get_all_s3_objects(s3_oci, cid_oci_bucket, Prefix)
+
+                  if oci_files is None:
+                      print("No files found in the OCI bucket.") #Need to put better contextual messages for multiple scenarios
+                      return
+                  else:
+                      print("Number of files found in the OCI bucket: ", len(oci_files))
+                      #print_files_s3bucket(s3_oci, cid_oci_bucket)
+                  
+                  # Get the timestamp to filter files. 'days' is the age filter and it only copies the files which are younger than the value specificied. 
+                  # It will only copy the files which have created/changed in the last x days
+                  timestamp = datetime.datetime.now() - datetime.timedelta(days=int(cid_oci_sync_duration))
+                  
+                  #File extension based filtering
+                  oci_filtered_files = [file for file in oci_files if file['Key'].endswith(cid_oci_file_extension) and 
+                                  datetime.datetime.strptime(file['LastModified'].strftime('%Y-%m-%d %H:%M:%S'), 
+                                  '%Y-%m-%d %H:%M:%S') > timestamp]
+
+                  print("Number of files found in the OCI bucket after filtering: ", len(oci_filtered_files))
+
+
+                  # Create SQS client
+                  sqs = boto3.client('sqs')
+
+                  # Process each file and send to SQS
+                  for file in oci_filtered_files:
+                      obj = s3_oci.get_object(Bucket=cid_oci_bucket, Key=file['Key'])
+                      data = obj['Body'].read()
+                      
+                      # Create message payload
+                      message = {
+                          'file_key': file['Key'],
+                          'file_size': file['Size'],
+                          'last_modified': file['LastModified'].strftime('%Y-%m-%d %H:%M:%S'),
+                          'source_bucket': cid_oci_bucket
+                      }
+
+                      # Send message to SQS
+                      try:
+                          response = sqs.send_message(
+                              QueueUrl=cid_oci_sqs_queue,
+                              MessageBody=json.dumps(message)
+                          )
+                          print(f"Message sent to SQS for file: {file['Key']}")
+                      except Exception as e:
+                          print(f"Error sending message to SQS for file {file['Key']}: {str(e)}")
+
+                  if send_response_back:
+                      # Send response back to CloudFormation
+                      send_response(event, context, 'SUCCESS', {'Message': 'Successfully executed OCI to S3 sync'})
+
+              except Exception as e:
+                  logger.info(f"Error in lambda_handler: {str(e)}")
+                  if send_response_back:
+                      send_response(event, context, 'FAILED', {'Error': str(e)})    
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      ReservedConcurrentExecutions: 1
+      #Add Lambda Architecture for x86_64
+      Architectures:
+        - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          OciRawDataS3Bucket: !Ref OCIrawS3Bucket
+          OCIToS3SyncStartDate: !Ref OCIToS3SyncStartDate
+          OracleSecretName: !Ref OCISecretsManager
+          OCIFocusExport: !Ref OCIFocusExport
+          OCIStandardExport: !Ref OCIStandardExport
+          OracleRegion: !Ref OracleRegion
+          OracleEndpointURL: !Ref OracleEndpointURL
+          OracleTenancyOCID: !Ref OracleTenancyOCID
+          OCICopyFileExtension: !Ref OCICopyFileExtension
+          OCIToS3SyncDuration: !Ref OCIToS3SyncDuration
+          OCICopySchedule: !Ref OCICopySchedule
+          PartitionSize: !Ref PartitionSize
+          MaxPartitionsPerFile: !Ref MaxPartitionsPerFile
+          UseFullFilePath: !Ref UseFullFilePath
+          OCISQSQueue: !Ref CidOciFocusSQSQueue
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: lambda
+        - Key: Name
+          Value: !Sub ${PrefixCode}-lambda-focus-${EnvironmentCode}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+      checkov:
+        skip:
+          - id: CKV_AWS_116 # Lambda functions should have a Dead Letter Queue configured
+            comment: "DLQ intentionally omitted as function errors are already handled by the primary SQS queue's error. Function outputs (including errors) are sent to main SQS queue. Main SQS queue has its own DLQ configured for error handling. Adding Lambda DLQ would create redundant error paths and potential duplicate error handling."
+          - id: CKV_AWS_117 # Lambda functions should be deployed inside a VPC
+            comment: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+          - id: CKV_AWS_173 #Ensure Lambda function variables are encrypted
+            comment: "Environment variables only contain references to Secrets Manager ARNs which are already encrypted with KMS CMK. No sensitive data is stored directly in environment variables, making additional encryption redundant."
+
+  CIDOCISyncToS3LambdaStandard:
+    Type: AWS::Lambda::Function
+    Condition: IsOCIStandardExportYes
+    Properties:
+      FunctionName: !Sub ${PrefixCode}-lambda-standard-${EnvironmentCode}
+      Description: Initial Lambda to list OCI Standard Cost and Usage Report files to be download of Standard solution
+      Role: !GetAtt LambdaIAM.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import datetime
+          import json
+          import logging
+          import urllib3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def send_response(event, context, response_status, response_data):
+              response_body = {
+                  'Status': response_status,
+                  'Reason': f'See CloudWatch Log Stream: {context.log_stream_name}',
+                  'PhysicalResourceId': context.log_stream_name,
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': response_data
+              }
+              
+              response_body = json.dumps(response_body)
+              logger.info(f"Response body: {response_body}")
+              
+              http = urllib3.PoolManager()
+              try:
+                  response = http.request(
+                      'PUT',
+                      event['ResponseURL'],
+                      headers={'Content-Type': ''},
+                      body=response_body
+                  )
+                  logger.info(f"Status code: {response.status}")
+              except Exception as e:
+                  logger.info(f"Error sending response: {str(e)}")
+                  raise
+
+          def get_all_s3_objects(s3Client, bucket_name, prefix):
+              s3_client = s3Client
+              all_objects = []
+              paginator = s3_client.get_paginator('list_objects_v2')
+              
+              for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+                  if 'Contents' in page:
+                      all_objects.extend(page['Contents'])
+                      print(f"Number of Objects found in this page = {page['KeyCount']}")
+                      #print(f"Contents found in Bucket: {page['Contents']} ")
+              return all_objects
+
+          #Write code for a function that accepts a string array of secret keys and return secret values in key pair format of secret
+          # key and secret value. The secret name is oci-secrets
+          def get_secrets(SecretId):
+              secretresponses = {}
+              client = boto3.client('secretsmanager')
+              response = client.get_secret_value(SecretId=SecretId)
+              secrets = response['SecretString']
+              
+              # Parse the JSON string from SecretString 
+              secret_dict = json.loads(secrets)
+              
+              return secret_dict
+
+          def store_run_status(dynamodb_table_name, run_id, run_status):
+                  # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+              
+              # Create the DynamoDB table if it does not exist
+              try:
+                  dynamodb.describe_table(TableName=dynamodb_table_name)
+              except dynamodb.exceptions.ResourceNotFoundException:
+                  dynamodb.create_table(
+                      TableName=dynamodb_table_name,
+                      KeySchema=[
+                          {
+                              'AttributeName': 'file_name',
+                              'KeyType': 'HASH'
+                          }
+                      ],
+                      AttributeDefinitions=[
+                          {
+                              'AttributeName': 'file_name',
+                              'AttributeType': 'S'
+                          }
+                      ],
+                      ProvisionedThroughput={
+                          'ReadCapacityUnits': 5,
+                          'WriteCapacityUnits': 5
+                      }
+                  )
+              # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+
+              # Get the current timestamp
+              timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+              # Prepare the item to be stored in DynamoDB
+              item = {
+                  'run_id': {'S': run_id},
+                  'run_status': {'S': run_status},
+                  'timestamp': {'S': timestamp}
+              }
+
+              # Store the item in DynamoDB
+              dynamodb.put_item(TableName=dynamodb_table_name, Item=item)
+
+          def print_files_s3bucket(s3_client, bucket_name, Prefix):
+              response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=Prefix)
+              print("Files found in Bucket: "+bucket_name+" are: ")
+              if 'Contents' in response:
+                  for obj in response['Contents']:
+                      #Print both the file name, path and the last modified date
+                      print(obj['Key'], obj['Size'], obj['LastModified'])
+              else:
+                  print("No files found in the bucket "+bucket_name)    
+
+          def lambda_handler(event, context):
+              
+              #add a variable (boolean) for sending response back or not
+              send_response_back = False
+              if 'ResponseURL' in event:
+                  send_response_back = True
+
+              logger.info(f"Received event: {json.dumps(event)}")
+
+              try:
+                  if event['RequestType'] == 'Delete':
+                      # Handle stack deletion - cleanup if needed
+                      logger.info("Handling Delete request")
+                      send_response(event, context, 'SUCCESS', {'Message': 'Resource Deletion not in Scope'})
+                      return
+
+                  if event['RequestType'] in ['Create', 'Update']:
+                      # Get parameters from the event
+                      props = event['ResourceProperties']
+                      # Add your OCI to S3 sync logic here
+                      logger.info("Executing CFN trigger OCI to S3 sync...")
+
+                  #Handle event request type = Scheduled
+                  if event['RequestType'] == 'Scheduled':
+                      logger.info("Executing Scheduled Run for OCI to S3 sync...")
+
+                  ##checkov:skip=CKV_SECRET_6: Base64 High Entropy String
+                  cid_oci_secrets_name = os.environ['OracleSecretName']
+                  cid_oci_raw_s3 = os.environ['OciRawDataS3Bucket']
+                  cid_oci_s3_sync_start_date = os.environ['OCIToS3SyncStartDate']
+                  cid_oci_endpoint_url = os.environ['OracleEndpointURL']
+                  cid_oci_region = os.environ['OracleRegion']
+                  cid_oci_file_extension = os.environ['OCICopyFileExtension']
+                  cid_oci_sync_duration = os.environ['OCIToS3SyncDuration']
+                  cid_oci_sqs_queue = os.environ['OCISQSQueue']
+                  cid_oci_export_focus = os.environ['OCIFocusExport']
+                  cid_oci_export_standard = os.environ['OCIStandardExport']
+
+                  #Get Secret from CID OCI Secrets Manager
+                  cid_oci_secrets = get_secrets(cid_oci_secrets_name)
+                  # print(cid_oci_secrets)
+                  cid_oci_access_key_id = cid_oci_secrets['oracle_access_key_id']
+                  cid_oci_secret_access_key = cid_oci_secrets['oracle_secret_access_secret']
+                  cid_oci_bucket = cid_oci_secrets['oracle_bucket']
+
+                  # Check if the secret is valid
+                  if cid_oci_access_key_id is None or cid_oci_secret_access_key is None:
+                      print("Invalid secret.")
+                      return
+                          
+                  # Get the AWS Raw bucket Details
+                  s3_aws = boto3.client('s3')
+                  print_files_s3bucket(s3_aws, cid_oci_raw_s3, "")
+
+                  s3_oci = boto3.client('s3',
+                                          endpoint_url=cid_oci_endpoint_url,
+                                          region_name=cid_oci_region,
+                                          aws_access_key_id=cid_oci_access_key_id,
+                                          aws_secret_access_key=cid_oci_secret_access_key)
+                  
+                  #Check to download FOCUS / Stanard / Both 
+                  Prefix = "reports/cost-csv/"
+                  # print(f"DEBUG ---- {cid_oci_export_focus},{cid_oci_export_standard}")
+                  # if cid_oci_export_focus == 'Yes' and cid_oci_export_standard == 'Yes':
+                  #     Prefix = ""
+                  # elif cid_oci_export_focus == 'Yes':
+                  #     Prefix =  "FOCUS Reports/"
+                  # elif cid_oci_export_standard == 'Yes':
+                  #     Prefix = "reports/"
+                  
+                  # oci_result = s3_oci.list_objects(Bucket=cid_oci_bucket, Prefix=Prefix)
+                  # oci_files = oci_result.get("Contents")
+                  oci_files = get_all_s3_objects(s3_oci, cid_oci_bucket, Prefix)
+
+                  if oci_files is None:
+                      print("No files found in the OCI bucket.") #Need to put better contextual messages for multiple scenarios
+                      return
+                  else:
+                      print("Number of files found in the OCI bucket: ", len(oci_files))
+                      #print_files_s3bucket(s3_oci, cid_oci_bucket)
+                  
+                  # Get the timestamp to filter files. 'days' is the age filter and it only copies the files which are younger than the value specificied. 
+                  # It will only copy the files which have created/changed in the last x days
+                  timestamp = datetime.datetime.now() - datetime.timedelta(days=int(cid_oci_sync_duration))
+                  
+                  #File extension based filtering
+                  oci_filtered_files = [file for file in oci_files if file['Key'].endswith(cid_oci_file_extension) and 
+                                  datetime.datetime.strptime(file['LastModified'].strftime('%Y-%m-%d %H:%M:%S'), 
+                                  '%Y-%m-%d %H:%M:%S') > timestamp]
+
+                  print("Number of files found in the OCI bucket after filtering: ", len(oci_filtered_files))
+
+
+                  # Create SQS client
+                  sqs = boto3.client('sqs')
+
+                  # Process each file and send to SQS
+                  for file in oci_filtered_files:
+                      obj = s3_oci.get_object(Bucket=cid_oci_bucket, Key=file['Key'])
+                      data = obj['Body'].read()
+                      
+                      # Create message payload
+                      message = {
+                          'file_key': file['Key'],
+                          'file_size': file['Size'],
+                          'last_modified': file['LastModified'].strftime('%Y-%m-%d %H:%M:%S'),
+                          'source_bucket': cid_oci_bucket
+                      }
+
+                      # Send message to SQS
+                      try:
+                          response = sqs.send_message(
+                              QueueUrl=cid_oci_sqs_queue,
+                              MessageBody=json.dumps(message)
+                          )
+                          print(f"Message sent to SQS for file: {file['Key']}")
+                      except Exception as e:
+                          print(f"Error sending message to SQS for file {file['Key']}: {str(e)}")
+
+                  if send_response_back:
+                      # Send response back to CloudFormation
+                      send_response(event, context, 'SUCCESS', {'Message': 'Successfully executed OCI to S3 sync'})
+
+              except Exception as e:
+                  logger.info(f"Error in lambda_handler: {str(e)}")
+                  if send_response_back:
+                      send_response(event, context, 'FAILED', {'Error': str(e)})    
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      ReservedConcurrentExecutions: 1
+      #Add Lambda Architecture for x86_64
+      Architectures:
+        - x86_64
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          OciRawDataS3Bucket: !Ref OCIrawS3Bucket
+          OCIToS3SyncStartDate: !Ref OCIToS3SyncStartDate
+          OracleSecretName: !Ref OCISecretsManager
+          OCIFocusExport: !Ref OCIFocusExport
+          OCIStandardExport: !Ref OCIStandardExport
+          OracleRegion: !Ref OracleRegion
+          OracleEndpointURL: !Ref OracleEndpointURL
+          OracleTenancyOCID: !Ref OracleTenancyOCID
+          OCICopyFileExtension: !Ref OCICopyFileExtension
+          OCIToS3SyncDuration: !Ref OCIToS3SyncDuration
+          OCICopySchedule: !Ref OCICopySchedule
+          PartitionSize: !Ref PartitionSize
+          MaxPartitionsPerFile: !Ref MaxPartitionsPerFile
+          UseFullFilePath: !Ref UseFullFilePath
+          OCISQSQueue: !Ref CidOciFocusSQSQueue
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: lambda
+        - Key: Name
+          Value: !Sub ${PrefixCode}-lambda-standard-${EnvironmentCode}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+      checkov:
+        skip:
+          - id: CKV_AWS_116 # Lambda functions should have a Dead Letter Queue configured
+            comment: "DLQ intentionally omitted as function errors are already handled by the primary SQS queue's error. Function outputs (including errors) are sent to main SQS queue. Main SQS queue has its own DLQ configured for error handling. Adding Lambda DLQ would create redundant error paths and potential duplicate error handling."
+          - id: CKV_AWS_117 # Lambda functions should be deployed inside a VPC
+            comment: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+          - id: CKV_AWS_173 # Ensure Lambda function variables are encrypted
+            comment: "Environment variables only contain references to Secrets Manager ARNs which are already encrypted with KMS CMK. No sensitive data is stored directly in environment variables, making additional encryption redundant."
+
+  #Read OCI CUR Objects from SQS - Achieving Async Processing
+  CIDOCISyncToS3SQSLambdaFunction:
+    Condition: IsAnyExportTypeSelectedYes
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${PrefixCode}-lambda-sqs-poll-${EnvironmentCode}
+      Description: SQS triggered Lambda to download OCI Standard/FOCUS Cost and Usage Report files
+      Role: !GetAtt LambdaIAM.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import datetime
+          import json
+          import logging
+          import urllib3
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          #Write code for a function that accepts a string array of secret keys and return secret values in key pair format of secret
+          # key and secret value. The secret name is oci-secrets
+          def get_secrets(SecretId):
+              secretresponses = {}
+              client = boto3.client('secretsmanager')
+              response = client.get_secret_value(SecretId=SecretId)
+              secrets = response['SecretString'] 
+
+              # Parse the JSON string from SecretString 
+              secret_dict = json.loads(secrets)
+              return secret_dict
+
+          def store_run_status(dynamodb_table_name, run_id, run_status):
+                  # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+              
+              # Create the DynamoDB table if it does not exist
+              try:
+                  dynamodb.describe_table(TableName=dynamodb_table_name)
+              except dynamodb.exceptions.ResourceNotFoundException:
+                  dynamodb.create_table(
+                      TableName=dynamodb_table_name,
+                      KeySchema=[
+                          {
+                              'AttributeName': 'file_name',
+                              'KeyType': 'HASH'
+                          }
+                      ],
+                      AttributeDefinitions=[
+                          {
+                              'AttributeName': 'file_name',
+                              'AttributeType': 'S'
+                          }
+                      ],
+                      ProvisionedThroughput={
+                          'ReadCapacityUnits': 5,
+                          'WriteCapacityUnits': 5
+                      }
+                  )
+              # Create a DynamoDB client
+              dynamodb = boto3.client('dynamodb')
+
+              # Get the current timestamp
+              timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+              # Prepare the item to be stored in DynamoDB
+              item = {
+                  'run_id': {'S': run_id},
+                  'run_status': {'S': run_status},
+                  'timestamp': {'S': timestamp}
+              }
+
+              # Store the item in DynamoDB
+              dynamodb.put_item(TableName=dynamodb_table_name, Item=item)
+
+          def print_files_s3bucket(s3_client, bucket_name, Prefix):
+              response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=Prefix)
+              print("Files found in Bucket: "+bucket_name+" are: ")
+              if 'Contents' in response:
+                  for obj in response['Contents']:
+                      #Print both the file name, path and the last modified date
+                      print(obj['Key'], obj['Size'], obj['LastModified'])
+              else:
+                  print("No files found in the bucket "+bucket_name)
+
+          def check_file_exists(s3_client, bucket, key):
+              """
+              Check if a file exists in S3
+              """
+              print(f"Check if a file exists in bucket {bucket} with Key={key}")
+              try:
+                  s3_client.head_object(Bucket=bucket, Key=key)
+                  return True
+              except s3_client.exceptions.ClientError as e:
+                  if e.response['Error']['Code'] == '404':
+                      return False
+                  raise e
+
+          def lambda_handler(event, context):
+              
+              cid_oci_secrets_name = os.environ['OracleSecretName']
+              cid_oci_raw_s3 = os.environ['OciRawDataS3Bucket']
+              cid_oci_s3_sync_start_date = os.environ['OCIToS3SyncStartDate']
+              cid_oci_endpoint_url = os.environ['OracleEndpointURL']
+              cid_oci_region = os.environ['OracleRegion']
+              cid_oci_file_extension = os.environ['OCICopyFileExtension']
+              cid_oci_sync_duration = os.environ['OCIToS3SyncDuration']
+
+              # Add SQS queue URL environment variable
+              #cid_oci_sqs_queue = os.environ['OCISQSQueue']
+
+              #Get Secret from CID OCI Secrets Manager
+              cid_oci_secrets = get_secrets(cid_oci_secrets_name)
+              cid_oci_access_key_id = cid_oci_secrets['oracle_access_key_id']
+              cid_oci_secret_access_key = cid_oci_secrets['oracle_secret_access_secret']
+              cid_oci_bucket = cid_oci_secrets['oracle_bucket']
+
+              # Check if the secret is valid
+              if cid_oci_access_key_id is None or cid_oci_secret_access_key is None:
+                  print("Invalid secret.")
+                  return
+                      
+              # Get the AWS Raw bucket Details
+              s3_aws = boto3.client('s3')
+              # print_files_s3bucket(s3_aws, cid_oci_raw_s3, "")
+
+              s3_oci = boto3.client('s3',
+                                      endpoint_url=cid_oci_endpoint_url,
+                                      region_name=cid_oci_region,
+                                      aws_access_key_id=cid_oci_access_key_id,
+                                      aws_secret_access_key=cid_oci_secret_access_key)
+
+              batch_item_failures = []
+              sqs_batch_response = {}
+              
+              # Process each record from SQS
+              for record in event['Records']:
+                  try:
+                      # Parse the message body
+                      message = json.loads(record['body'])
+                      
+                      # Get the message ID
+                      message_id = record['messageId']
+
+                      # Extract file information
+                      file_key = message['file_key']
+                      source_bucket = message['source_bucket']
+                      last_modified = message['last_modified']
+                      file_size = message['file_size']
+                      
+                      print(f"Processing file: {file_key} from bucket: {source_bucket}")
+                                  
+                      # Prepare metadata
+                      metadata = {
+                          'source-bucket': source_bucket,
+                          'last-modified': last_modified,
+                          'original-size': str(file_size)
+                      }
+                      
+
+                      # Upload CUR objects to AWS S3 Bucket
+                      try:
+                          # Get the source object and its ETag
+                          obj = s3_oci.head_object(Bucket=cid_oci_bucket, Key=file_key)
+                          # source_etag = obj['ETag']
+                          
+                          # Prepare the destination key
+                          folder_structure = os.path.dirname(file_key)
+                          oci_key = folder_structure + '/' + os.path.basename(file_key)
+                          processed_oci_key = "processed/"+oci_key                
+
+                          if (not check_file_exists(s3_aws, cid_oci_raw_s3, processed_oci_key)):
+                              if (not check_file_exists(s3_aws, cid_oci_raw_s3, oci_key)):
+                                  obj = s3_oci.get_object(Bucket=cid_oci_bucket, Key=file_key)
+                                  data = obj['Body'].read()
+                                  # Replicate the AWS S3 bucket folder structure to the OCI bucket
+                                  folder_structure = os.path.dirname(file_key)
+                                  oci_key = folder_structure + '/' + os.path.basename(file_key)
+
+
+                                  response=s3_aws.put_object(Bucket=cid_oci_raw_s3, Key=oci_key, Body=data)
+                                  
+                                  # Check if upload was successful
+                                  if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                                      print(f"Successfully uploaded {file_key} to {cid_oci_raw_s3}")
+                                  else:
+                                      print(f"Upload failed with {file_key} to {cid_oci_raw_s3} with response {response}")
+                                      raise Exception(f"Upload failed with response: {response}")
+                              else:
+                                  print(f"File {oci_key} already exists - skipping !!")
+                          else:
+                              print(f"File {processed_oci_key} already exists  - skipping !!")   
+
+                      except Exception as e:
+                          logger.info(f"Error uploading file {file_key} to S3: {str(e)}")
+                          logger.info(f"Unexpected error processing record: {str(e)}")
+                          batch_item_failures.append({"itemIdentifier": record['messageId']})
+                          raise e
+                      
+                  except Exception as e:
+                      logger.info(f"Unexpected error processing record: {str(e)}")
+                      batch_item_failures.append({"itemIdentifier": record['messageId']})
+                  
+              #Check if batch_item_failures is empty or not
+              if not batch_item_failures:
+                  print("All records processed successfully")
+              elif batch_item_failures:
+                  sqs_batch_response["batchItemFailures"] = batch_item_failures
+                  return sqs_batch_response
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Processing complete')
+              }
+      Handler: index.lambda_handler
+      Runtime: python3.12
+      ReservedConcurrentExecutions: 10
+      #Add Lambda Architecture for x86_64
+      Architectures:
+        - x86_64
+      Timeout: 900
+      MemorySize: 256
+      RuntimeManagementConfig:
+        UpdateRuntimeOn: Auto      
+      Environment:
+        Variables:
+          OciRawDataS3Bucket: !Ref OCIrawS3Bucket
+          OCIToS3SyncStartDate: !Ref OCIToS3SyncStartDate
+          OracleSecretName: !Ref OCISecretsManager
+          OracleRegion: !Ref OracleRegion
+          OracleEndpointURL: !Ref OracleEndpointURL
+          OracleTenancyOCID: !Ref OracleTenancyOCID
+          OCICopyFileExtension: !Ref OCICopyFileExtension
+          OCIToS3SyncDuration: !Ref OCIToS3SyncDuration
+          OCICopySchedule: !Ref OCICopySchedule
+          PartitionSize: !Ref PartitionSize
+          MaxPartitionsPerFile: !Ref MaxPartitionsPerFile
+          UseFullFilePath: !Ref UseFullFilePath
+          OCISQSQueue: !Ref CidOciFocusSQSQueue
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: lambda
+        - Key: Name
+          Value: !Sub ${PrefixCode}-lambda-sqs-poll-${EnvironmentCode}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+      checkov:
+        skip:
+          - id: CKV_AWS_116 # Lambda functions should have a Dead Letter Queue configured
+            comment: "DLQ intentionally omitted as function errors are already handled by the primary SQS queue's error. Function outputs (including errors) are sent to main SQS queue. Main SQS queue has its own DLQ configured for error handling. Adding Lambda DLQ would create redundant error paths and potential duplicate error handling."
+          - id: CKV_AWS_117 # Lambda functions should be deployed inside a VPC
+            comment: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+          - id: CKV_AWS_173 # Ensure Lambda function variables are encrypted
+            comment: "Environment variables only contain references to Secrets Manager ARNs which are already encrypted with KMS CMK. No sensitive data is stored directly in environment variables, making additional encryption redundant."
+
+  #Event source mapping to connect SQS to Initial Lambda - Focus
+  SQSLambdaEventSourceMapping:
+    Condition: IsAnyExportTypeSelectedYes
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt CidOciFocusSQSQueue.Arn
+      FunctionName: !GetAtt CIDOCISyncToS3SQSLambdaFunction.Arn
+      BatchSize: 10
+      Enabled: true
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Condition: IsAnyExportTypeSelectedYes    
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - !If 
+                - IsOCIFocusExportYes
+                - Effect: Allow
+                  Action: lambda:InvokeFunction
+                  Resource: !GetAtt CIDOCISyncToS3LambdaFocus.Arn
+                - !Ref AWS::NoValue  
+              - !If 
+                - IsOCIStandardExportYes
+                - Effect: Allow
+                  Action: lambda:InvokeFunction
+                  Resource: !GetAtt CIDOCISyncToS3LambdaStandard.Arn
+                - !Ref AWS::NoValue
+
+  ExecuteCidOciInitialLambdaFocus:
+    Condition: IsOCIExportAutoTriggeronUpdateFocus
+    Type: Custom::LambdaExecution
+    Properties:
+      ServiceTimeout: 900
+      ServiceToken: !GetAtt CIDOCISyncToS3LambdaFocus.Arn
+
+  ExecuteCidOciInitialLambdaStandard:
+    Condition: IsOCIExportAutoTriggeronUpdateStandard
+    Type: Custom::LambdaExecution
+    Properties:
+      ServiceTimeout: 900
+      ServiceToken: !GetAtt CIDOCISyncToS3LambdaStandard.Arn
+
+  #EventBridge Schedule for Initial Lambda Function - FOCUS
+  CIDOCILambdaScheduleFocus:
+    Condition: IsOCIFocusExportYes    
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${PrefixCode}-lambda-scheduler-focus-${EnvironmentCode}
+      Description: !Sub "Schedule to invoke ${PrefixCode}-lambda-focus-${EnvironmentCode} function"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref OCICopySchedule
+      ScheduleExpressionTimezone: "UTC"
+      Target:
+        Arn: !GetAtt CIDOCISyncToS3LambdaFocus.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 3
+        Input: '{"RequestType": "Scheduled"}'
+      State: "ENABLED"
+
+  #EventBridge Schedule for Initial Lambda Function - Standard
+  CIDOCILambdaScheduleStandard:
+    Type: AWS::Scheduler::Schedule
+    Condition: IsOCIStandardExportYes
+    Properties:
+      Name: !Sub ${PrefixCode}-lambda-scheduler-standard-${EnvironmentCode}
+      Description: !Sub "Schedule to invoke ${PrefixCode}-lambda-standard-${EnvironmentCode} function"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref OCICopySchedule
+      ScheduleExpressionTimezone: "UTC"
+      Target:
+        Arn: !GetAtt CIDOCISyncToS3LambdaStandard.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 3
+        Input: '{"RequestType": "Scheduled"}'
+      State: "ENABLED"
+
+  #CID FOCUS OCI Database
+  CidOciFocusDatabase:
+    Type: AWS::Glue::Database
+    Condition: IsAnyExportTypeSelectedYes
+    Properties:
+      DatabaseInput:
+        Name: !Join [ '_', !Split [ '-', !Sub '${PrefixCode}_data_export_${EnvironmentCode}' ] ]
+      CatalogId: !Sub "${AWS::AccountId}"
+
+  # IAM Role configuration for Glue Resources
+  CidOciFocusGlueIAM:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: CID OCI IAM Role for Glue Job
+      RoleName: !Sub ${PrefixCode}-role-glue-${EnvironmentCode}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-glue-${EnvironmentCode}-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:CreateTable
+                  - glue:CreatePartition
+                  - glue:GetDatabase
+                  - glue:GetTable
+                  - glue:GetTables
+                  - glue:GetPartition
+                  - glue:UpdateDatabase
+                  - glue:UpdateTable
+                  - glue:UpdatePartition
+                  - glue:BatchCreatePartition
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${CidOciFocusDatabase}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${CidOciFocusDatabase}/*"
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObjectTagging
+                  - s3:PutObjectTagging
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}
+                  - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}*
+                  - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}/*
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObjectTagging
+                  - s3:PutObjectTagging
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+                  - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/*
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  - !GetAtt KMSKey.Arn
+              - Effect: Allow
+                Action:
+                  - logs:AssociateKmsKey
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: analytics
+        - Key: Name
+          Value: !Sub ${PrefixCode}-role-glue-${EnvironmentCode}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W28'
+            reason: "Need an explicit name for reference"
+          - id: 'W11'
+            reason: "Cannot Put Resource for Glue Cloudwatch Namespace. Added Condition instead"
+
+  CidOciFocusGlueJobFocus:
+    Type: AWS::Glue::Job
+    Condition: IsOCIFocusExportYes
+    Properties:
+      Description: Glue ETL job to convert FOCUS CSV files from OCI to Parquet files. Also create a Glue Table
+      Name: !Sub ${PrefixCode}-gluejob-${EnvironmentCode}
+      Role: !Ref CidOciFocusGlueIAM
+      GlueVersion: "4.0"
+      WorkerType: G.1X
+      NumberOfWorkers: 5
+      MaxRetries: 0
+      Timeout: 60
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub "s3://${ArtifactBucket}/scripts/oci-focus-csv-to-parquet-glue.py"
+        PythonVersion: "3"
+      DefaultArguments:
+        --source_bucket: !Ref OCIrawS3Bucket
+        --source_prefix: !Sub "${CidOciFocusGlueETLSourcePrefix}"
+        --destination_bucket: !Ref DestinationS3Bucket
+        --destination_prefix: !Sub "${CidOciFocusGlueETLTargetPrefix}"
+        --focus_prefix: !Sub "${CidOciFocusPrefix}"
+        --glue_table: !Sub "${CidOciFocusGlueTable}"
+        --glue_database: !Ref CidOciFocusDatabase
+        --glue_noniso_format: !Sub "${CidOciFocusNonISODateFormat}"
+        --enable-metrics: true
+        --spark-event-logs-path:  !Sub "s3://${ArtifactBucket}/sparkHistoryLogs/focus/"
+        --enable-job-insights: true
+        --enable-observability-metrics: true
+        --enable-glue-datacatalog:  true
+        --enable-continuous-cloudwatch-log: true
+        --job-bookmark-option:  job-bookmark-disable
+        --job-language: python
+        --TempDir:  !Sub "s3://${ArtifactBucket}/sparkHistoryLogs/focus/"
+      SecurityConfiguration: !Ref GlueSecurity
+      Tags:
+        Customer: !Sub ${OwnerTag}
+        Environment: !Sub ${EnvironmentTag}
+        Provisioner: CFN
+        Solution: cid-oci
+        Rtype: data
+        Name: !Sub ${PrefixCode}-gluejob-${EnvironmentCode}
+
+  CidOciStandardGlueJob:
+    Type: AWS::Glue::Job
+    Condition: IsOCIStandardExportYes
+    Properties:
+      Description: Glue ETL job to convert Standard CUR CSV files from OCI to Parquet files. Also create a Glue Table
+      Name: !Sub ${PrefixCode}-gluejob-stnd-${EnvironmentCode}
+      Role: !Ref CidOciFocusGlueIAM
+      GlueVersion: "4.0"
+      WorkerType: G.1X
+      NumberOfWorkers: 5
+      MaxRetries: 0
+      Timeout: 60
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub "s3://${ArtifactBucket}/scripts/oci-standard-csv-to-parquet-glue.py"
+        PythonVersion: "3"
+      DefaultArguments:
+        --source_bucket: !Ref OCIrawS3Bucket
+        --source_prefix: !Sub "${CidOciStandardGlueETLSourcePrefix}"
+        --destination_bucket: !Ref DestinationS3Bucket
+        --destination_prefix: !Sub "${CidOciStandardGlueETLTargetPrefix}"
+        --standard_prefix: !Sub "${CidOciStandardPrefix}"
+        --glue_table: !Sub "${CidOciStandardGlueTable}"
+        --glue_database: !Ref CidOciFocusDatabase
+        --glue_noniso_format: !Sub "${CidOciStandardNonISODateFormat}"
+        --enable-metrics: true
+        --spark-event-logs-path:  !Sub "s3://${ArtifactBucket}/sparkHistoryLogs/focus/"
+        --enable-job-insights: true
+        --enable-observability-metrics: true
+        --enable-glue-datacatalog:  true
+        --enable-continuous-cloudwatch-log: true
+        --job-bookmark-option:  job-bookmark-disable
+        --job-language: python
+        --TempDir:  !Sub "s3://${ArtifactBucket}/sparkHistoryLogs/focus/"
+      SecurityConfiguration: !Ref GlueSecurity
+      Tags:
+        Customer: !Sub ${OwnerTag}
+        Environment: !Sub ${EnvironmentTag}
+        Provisioner: CFN
+        Solution: cid-oci
+        Rtype: data
+        Name: !Sub ${PrefixCode}-gluejob-stnd-${EnvironmentCode}
+
+  GlueSecurity:
+    Type: AWS::Glue::SecurityConfiguration
+    Condition: IsAnyExportTypeSelectedYes
+    Properties:
+      Name: !Sub ${PrefixCode}-glx-${EnvironmentCode}
+      EncryptionConfiguration:
+        CloudWatchEncryption:
+          CloudWatchEncryptionMode: SSE-KMS
+          KmsKeyArn: !GetAtt KMSKey.Arn
+        JobBookmarksEncryption:
+          JobBookmarksEncryptionMode: CSE-KMS
+          KmsKeyArn: !GetAtt KMSKey.Arn
+        S3Encryptions:
+          - KmsKeyArn: !GetAtt KMSKey.Arn
+            S3EncryptionMode: SSE-KMS
+
+  GlueTriggerFocus:
+    Type: AWS::Glue::Trigger
+    Condition: IsOCIFocusExportYes
+    Properties:
+      Description: CID for OCI Standard Glue ETL job schedule
+      Name: !Sub ${PrefixCode}-glt-${EnvironmentCode}
+      Actions:
+        - JobName: !Ref CidOciFocusGlueJobFocus
+      Schedule: !Sub ${CidOciFocusGlueCopySchedule}
+      StartOnCreation: true
+      Type: SCHEDULED
+      Tags:
+        Customer: !Sub ${OwnerTag}
+        Environment: !Sub ${EnvironmentTag}
+        Provisioner: CFN
+        Solution: cid-oci
+        Rtype: data
+        Name: !Sub ${PrefixCode}-glt-${EnvironmentCode}
+
+  GlueTriggerStandard:
+    Type: AWS::Glue::Trigger
+    Condition: IsOCIStandardExportYes
+    Properties:
+      Description: CID for OCI Standard Glue ETL job schedule
+      Name: !Sub ${PrefixCode}-glt-stnd-${EnvironmentCode}
+      Actions:
+        - JobName: !Ref CidOciStandardGlueJob
+      Schedule: !Sub ${CidOciFocusGlueCopySchedule}
+      StartOnCreation: true
+      Type: SCHEDULED
+      Tags:
+        Customer: !Sub ${OwnerTag}
+        Environment: !Sub ${EnvironmentTag}
+        Provisioner: CFN
+        Solution: cid-oci
+        Rtype: data
+        Name: !Sub ${PrefixCode}-glt-stnd-${EnvironmentCode}
+
+  ### Athena resources
+  AthenaWorkgroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Description: Cloud Intelligence Dashboard for OCI Athena Workgroup
+      Name: !Sub ${PrefixCode}-workgroup-${EnvironmentCode}
+      RecursiveDeleteOption: true
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        ResultConfiguration:
+          EncryptionConfiguration:
+            EncryptionOption: SSE_KMS
+            KmsKey: !Ref KMSKey
+          OutputLocation: !Sub s3://${ArtifactBucket}/cidociqueries
+
+  #Saved Query in Athena
+  AthenaQueryFOCUSConsolidationView:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database: !Ref CidOciFocusDatabase
+      Description: Cloud Intelligence Dashboard for OCI FOCUS export Athena Named Query Consolidation View
+      Name: !Sub ${PrefixCode}-consolidation-view-${EnvironmentCode}
+      WorkGroup: !Ref AthenaWorkgroup
+      QueryString: !Sub |
+        CREATE OR REPLACE VIEW "focus_consolidation_view" AS 
+        SELECT
+            AvailabilityZone,
+            BilledCost,
+            BillingAccountId,
+            BillingAccountName,
+            BillingCurrency,
+            BillingPeriodEnd,
+            BillingPeriodStart,
+            ChargeCategory,
+            ChargeClass,
+            ChargeDescription,
+            ChargeFrequency,
+            ChargePeriodEnd,
+            ChargePeriodStart,
+            CommitmentDiscountCategory,
+            CommitmentDiscountId,
+            CommitmentDiscountName,
+            CommitmentDiscountType,
+            CommitmentDiscountStatus,
+            ConsumedQuantity,
+            ConsumedUnit,
+            ContractedCost,
+            ContractedUnitPrice,
+            EffectiveCost,
+            InvoiceIssuerName,
+            ListCost,
+            ListUnitPrice,
+            PricingCategory,
+            PricingQuantity,
+            PricingUnit,
+            ProviderName,
+            PublisherName,
+            RegionId,
+            RegionName,
+            ResourceId,
+            ResourceName,
+            ResourceType,
+            ServiceCategory,
+            ServiceName,
+            SkuId,
+            SkuPriceId,
+            SubAccountId,
+            SubAccountName,
+            Tags,
+            billing_period
+        FROM
+            -- Default AWS FOCUS database name and table used below. Change if necessary
+            "cid_data_export"."focus"
+            
+        UNION ALL
+
+        SELECT
+            NULL AS AvailabilityZone,
+            BilledCost,
+            BillingAccountId,
+            BillingAccountName,
+            BillingCurrency,
+            BillingPeriodEnd,
+            BillingPeriodStart,
+            ChargeCategory,
+            ChargeClass,
+            ChargeDescription,
+            ChargeFrequency,
+            ChargePeriodEnd,
+            ChargePeriodStart,
+            CommitmentDiscountCategory,
+            CommitmentDiscountId,
+            CommitmentDiscountName,
+            CommitmentDiscountType,
+            CommitmentDiscountStatus,
+            ConsumedQuantity,
+            ConsumedUnit,
+            ContractedCost,
+            ContractedUnitPrice,
+            EffectiveCost,
+            InvoiceIssuerName,
+            ListCost,
+            ListUnitPrice,
+            PricingCategory,
+            PricingQuantity,
+            PricingUnit,
+            ProviderName,
+            PublisherName,
+            RegionId,
+            RegionName,
+            ResourceId,
+            ResourceName,
+            ResourceType,
+            ServiceCategory,
+            ServiceName,
+            SkuId,
+            SkuPriceId,
+            SubAccountId,
+            SubAccountName,
+            Tags,
+            billing_period
+        FROM
+            "${CidOciFocusDatabase}"."${CidOciFocusGlueTable}"
+
+
+  QuickSightRolePolicy:
+    Type: 'AWS::IAM::RolePolicy'
+    Properties:
+      RoleName: !Ref QuickSightServiceRole  # Reference to your parameter
+      PolicyName: !Sub ${PrefixCode}-quicksight-permissions-${EnvironmentCode}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:    
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucketMultipartUploads
+              - s3:GetBucketLocation
+              - s3:PutObject
+              - s3:GetObjectAcl
+              - s3:AbortMultipartUpload
+              - s3:ListMultipartUploadParts            
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}
+              - !Sub arn:${AWS::Partition}:s3:::${OCIrawS3Bucket}/*
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}*
+              - !Sub arn:${AWS::Partition}:s3:::${DestinationS3Bucket}/*
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}
+              - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucket}/*
+          - Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Effect: Allow
+            Action:
+              - glue:CreateTable
+              - glue:CreatePartition
+              - glue:GetDatabase
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetPartition
+              - glue:UpdateDatabase
+              - glue:UpdateTable
+              - glue:UpdatePartition
+              - glue:BatchCreatePartition
+            Resource:
+              - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+              - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${CidOciFocusDatabase}"
+              - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${CidOciFocusDatabase}/*"
+
+############################################
+## Cloudwatch Dashboard for observability ##
+############################################
+
+  ### Cloudwatch Dashboard
+  CloudwatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub ${PrefixCode}-cloudwatch-dashboard-${EnvironmentCode}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 0,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m1" } ],
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m2" } ],
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m3" } ]
+                ],
+                "legend": {
+                    "position": "bottom"
+                },
+                "period": 300,
+                "view": "singleValue",
+                "stacked": true,
+                "title": "Lambda Invocations",
+                "stat": "Sum",
+                "liveData": true,
+                "sparkline": true,
+                "trend": true,
+                "setPeriodToTimeRange": true,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 1,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m7" } ],
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m8" } ],
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m9" } ]
+                ],
+                "legend": {
+                    "position": "bottom"
+                },
+                "period": 300,
+                "view": "singleValue",
+                "stacked": false,
+                "title": "Lambda Errors",
+                "stat": "Sum",
+                "liveData": true,
+                "sparkline": true,
+                "trend": true,
+                "setPeriodToTimeRange": true,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 2,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m13" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m14" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m15" } ]
+                ],
+                "legend": {
+                    "position": "bottom"
+                },
+                "period": 300,
+                "view": "singleValue",
+                "stacked": true,
+                "title": "Lambda Duration",
+                "stat": "p90",
+                "liveData": true,
+                "sparkline": true,
+                "trend": true,
+                "setPeriodToTimeRange": true,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "x": 0,
+              "y": 3,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m19" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m20" } ],
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m21" } ]
+                ],
+                "legend": {
+                    "position": "bottom"
+                },
+                "period": 86400,
+                "view": "timeSeries",
+                "stacked": true,
+                "title": "Lambda Duration Graph",
+                "stat": "p90",
+                "liveData": false,
+                "trend": true,
+                "setPeriodToTimeRange": true,
+                "region": "${AWS::Region}"
+              }
+            },
+        {
+            "height": 6,
+            "width": 12,
+            "y": 15,
+            "x": 0,
+            "type": "metric",
+            "properties": {
+                "metrics": [
+                    [ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
+                    [ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ],
+                    [ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
+                    [ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ],
+                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
+                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ]
+                ],
+                "legend": {
+                    "position": "bottom"
+                },
+                "period": 300,
+                "view": "singleValue",
+                "stacked": true,
+                "title": "SQS Metrics",
+                "stat": "Sum",
+                "liveData": true,
+                "sparkline": true,
+                "trend": true,
+                "setPeriodToTimeRange": true,
+                "region": "${AWS::Region}"
+            }
+        },
+        {
+            "height": 6,
+            "width": 12,
+            "y": 15,
+            "x": 12,
+            "type": "metric",
+            "properties": {
+                "view": "timeSeries",
+                "stacked": false,
+                "metrics": [
+                    [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${OCIrawS3Bucket}", { "period": 86400 } ],
+                    [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${DestinationS3Bucket}", { "period": 86400 } ]
+                ],
+                "setPeriodToTimeRange": false,
+                "start": "-PT168H",
+                "end": "PT0H",
+                "region": "${AWS::Region}",
+                "title": "S3 Storage",
+                "yAxis": {
+                    "left": {
+                        "label": "Size(GB)"
+                    }
+                }
+            }
+        },
+            {
+              "type": "log",
+              "width": 24,
+              "height": 9,
+              "x": 0,
+              "y": 5,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' | SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' | SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | sort @timestamp desc | limit 300",
+                "region": "${AWS::Region}",
+                "title": "Lambda Trace",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                "region": "${AWS::Region}",
+                "title": "CIDOCISyncToS3LambdaFocus Errors",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 7,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                "region": "${AWS::Region}",
+                "title": "CIDOCISyncToS3LambdaStandard Errors",
+                "view": "table"
+              }
+            },
+            {
+              "type": "log",
+              "width": 24,
+              "height": 3,
+              "x": 0,
+              "y": 8,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                "region": "${AWS::Region}",
+                "title": "CIDOCISyncToS3SQSLambdaFunction Errors",
+                "view": "table"
+              }
+            }
+          ]
+        }
+
+
+#######################################
+##    Reporting Layer for Deployment ##
+#######################################
+
+  #CID Installation log
+  LambdaFunctionLogRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Cloud Intelligence Dashboard for OCI IAM role for install logging
+      RoleName: !Sub ${PrefixCode}-iam-installation-log-${EnvironmentCode}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${PrefixCode}-iam-installation-log-${EnvironmentCode}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:CreateLogGroup
+              Resource:
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PrefixCode}-lambda-installation-log-${EnvironmentCode}"
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PrefixCode}-lambda-installation-log-${EnvironmentCode}:*"
+              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${PrefixCode}-lambda-installation-log-${EnvironmentCode}:*:*"
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: storage
+        - Key: Name
+          Value: !Sub ${PrefixCode}-iam-installation-log-${EnvironmentCode}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: 'W28'
+            reason: "Need an explicit name for reference"
+          - id: 'W11'
+            reason: "Cannot Put Resource for Glue Cloudwatch Namespace. Added Condition instead"
+
+  LambdaFunctionLog:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Cloud Intelligence Dashboard Lambda to record install of FOCUS solution
+      Runtime: python3.12
+      FunctionName: !Sub ${PrefixCode}-lambda-installation-log-${EnvironmentCode}
+      Handler: index.lambda_handler
+      MemorySize: 128
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt LambdaFunctionLogRole.Arn
+      Timeout: 15
+      Environment:
+        Variables:
+          API_ENDPOINT: https://okakvoavfg.execute-api.eu-west-1.amazonaws.com/
+      Code:
+        ZipFile: |
+          import os
+          import json
+          import uuid
+          import urllib3
+
+          import boto3
+          import cfnresponse
+
+          http = urllib3.PoolManager()
+          endpoint = os.environ["API_ENDPOINT"]
+          account_id = boto3.client("sts").get_caller_identity()["Account"]
+
+          def execute_request(action, product_id, via_key):
+              try:
+                  payload = {'dashboard_id': product_id, 'account_id': account_id, via_key: 'CFN'}
+                  encoded_data = json.dumps(payload).encode('utf-8')
+                  r = http.request(action, endpoint, body=encoded_data, headers={'Content-Type': 'application/json'})
+                  if r.status != 200:
+                      return f"This will not fail the deployment. There has been an issue logging action {action} for product {product_id} and account {account_id}, server did not respond with a 200 response, status: {r.status}, response data {r.data.decode('utf-8')}. This issue will be ignored"
+              except urllib3.exceptions.HTTPError as e:
+                  return f"Issue logging action {action} for product {product_id} and account {account_id}, due to a urllib3 exception {str(e)}. This issue will be ignored"
+              return None
+
+          def register_deployment(action, products):
+              message = f"Successfully logged  {action} for {products}"
+              for product_id in products:
+                  if action == 'Create':
+                      message = execute_request('PUT', product_id, 'created_via')
+                  elif action == 'Update':
+                      message = execute_request('PATCH', product_id, 'updated_via')
+                  elif action == 'Delete':
+                      message = execute_request('DELETE', product_id, 'deleted_via')
+                  if not message:
+                      message = f"Successfully logged {action} for {products} "
+              #Do not stop deployment if we're not able to successfully record this deployment, still return true
+              return (True, message)
+
+          def lambda_handler(event, context):
+              print(event)
+
+              if event['RequestType'] in ['Create', 'Update', 'Delete']:
+                  res, reason = register_deployment(event['RequestType'], event['ResourceProperties']['DeploymentType'])
+              else:
+                  res, reason = False, "Unknown operation: " + event['RequestType']
+
+              physicalResourceId = event.get('ResourceProperties', {}).get('Export', {}).get('Name') or str(uuid.uuid1())
+              if res:
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId )
+              else:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {}, physicalResourceId, reason=reason)
+      Tags:
+        - Key: Owner
+          Value: !Sub ${OwnerTag}
+        - Key: Environment
+          Value: !Sub ${EnvironmentTag}
+        - Key: Provisioner
+          Value: CFN
+        - Key: Solution
+          Value: cid-oci
+        - Key: Rtype
+          Value: storage
+        - Key: Name
+          Value: !Sub ${PrefixCode}-bucket-${EnvironmentCode}-${AWS::AccountId}${AWS::Region}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89 # Lambda functions should be deployed inside a VPC
+            reason: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+      checkov:
+        skip:
+          - id: CKV_AWS_116 # Lambda functions should have a Dead Letter Queue configured
+            comment: "DLQ intentionally omitted as function errors are already handled by the primary SQS queue's error. Function outputs (including errors) are sent to main SQS queue. Main SQS queue has its own DLQ configured for error handling. Adding Lambda DLQ would create redundant error paths and potential duplicate error handling."
+          - id: CKV_AWS_117 # Lambda functions should be deployed inside a VPC
+            comment: "This Lambda function processes public API requests and doesn't need access to private VPC resources. Keeping it outside VPC avoids unnecessary NAT gateway costs and reduces cold start latency."
+          - id: CKV_AWS_173 #Ensure Lambda function variables are encrypted
+            comment: "Environment variables only contain references to Secrets Manager ARNs which are already encrypted with KMS CMK. No sensitive data is stored directly in environment variables, making additional encryption redundant."
+
+  AnalyticsExecutorForDataExports:
+    Type: Custom::InstallLoggerforCIDOCI
+    Properties:
+      ServiceToken: !GetAtt LambdaFunctionLog.Arn
+      DeploymentType: 
+        - !If [IsOCIFocusExportYes, "cid-oci-focus", !Ref 'AWS::NoValue']
+        - !If [IsOCIStandardExportYes, "cid-oci-standard", !Ref 'AWS::NoValue']
