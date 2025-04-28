@@ -98,14 +98,32 @@ def copy_s3_objects(source_bucket, source_folder, destination_bucket, destinatio
 ### Delete Function
 def delete_s3_folder(bucket, folder):
     s3_client = boto3.client('s3')
-    response = s3_client.list_objects(Bucket=bucket, Prefix=folder)
-    objects = response.get('Contents', [])
-    if objects:
-        delete_keys = [{'Key': obj['Key']} for obj in objects]
-        s3_client.delete_objects(Bucket=bucket, Delete={'Objects': delete_keys})
-        print("INFO: Delete process complete")
-    else:
-        print(("INFO: No files in {}, delete process skipped.").format(folder))
+    
+    # Use paginator for handling large number of objects
+    paginator = s3_client.get_paginator('list_objects_v2')
+    delete_objects = []
+    
+    try:
+        # Iterate through pages of objects
+        for page in paginator.paginate(Bucket=bucket, Prefix=folder):
+            if 'Contents' in page:
+                # Batch objects for deletion (max 1000 per request)
+                delete_objects.extend([{'Key': obj['Key']} for obj in page['Contents']])
+                
+                # Delete in batches of 1000 (AWS limit)
+                while delete_objects:
+                    batch = delete_objects[:1000]
+                    s3_client.delete_objects(
+                        Bucket=bucket,
+                        Delete={'Objects': batch}
+                    )
+                    delete_objects = delete_objects[1000:]
+                print("INFO: Delete process complete")
+            else:
+                print(f"INFO: No files in {folder}, delete process skipped.")
+    except Exception as e:
+        print(f"ERROR: Failed to delete objects from {folder}: {str(e)}")
+
 sc = SparkContext.getOrCreate()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
