@@ -2133,230 +2133,322 @@ Resources:
 ## Cloudwatch Dashboard for observability ##
 ############################################
 
-  ### Cloudwatch Dashboard
   CloudwatchDashboard:
     Type: AWS::CloudWatch::Dashboard
     Properties:
       DashboardName: !Sub ${PrefixCode}-cloudwatch-dashboard-${EnvironmentCode}
-      DashboardBody: !Sub |
-        {
-          "widgets": [
+      DashboardBody:
+        Fn::Sub:
+          - |
             {
-              "type": "metric",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 0,
-              "properties": {
-                "metrics": [
-                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m1" } ],
-                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m2" } ],
-                  [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m3" } ]
-                ],
-                "legend": {
-                    "position": "bottom"
-                },
-                "period": 300,
-                "view": "singleValue",
-                "stacked": true,
-                "title": "Lambda Invocations",
-                "stat": "Sum",
-                "liveData": true,
-                "sparkline": true,
-                "trend": true,
-                "setPeriodToTimeRange": true,
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 1,
-              "properties": {
-                "metrics": [
-                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m7" } ],
-                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m8" } ],
-                  [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m9" } ]
-                ],
-                "legend": {
-                    "position": "bottom"
-                },
-                "period": 300,
-                "view": "singleValue",
-                "stacked": false,
-                "title": "Lambda Errors",
-                "stat": "Sum",
-                "liveData": true,
-                "sparkline": true,
-                "trend": true,
-                "setPeriodToTimeRange": true,
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 2,
-              "properties": {
-                "metrics": [
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m13" } ],
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m14" } ],
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m15" } ]
-                ],
-                "legend": {
-                    "position": "bottom"
-                },
-                "period": 300,
-                "view": "singleValue",
-                "stacked": true,
-                "title": "Lambda Duration",
-                "stat": "p90",
-                "liveData": true,
-                "sparkline": true,
-                "trend": true,
-                "setPeriodToTimeRange": true,
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "width": 24,
-              "height": 6,
-              "x": 0,
-              "y": 3,
-              "properties": {
-                "metrics": [
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m19" } ],
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m20" } ],
-                  [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m21" } ]
-                ],
-                "legend": {
-                    "position": "bottom"
-                },
-                "period": 86400,
-                "view": "timeSeries",
-                "stacked": true,
-                "title": "Lambda Duration Graph",
-                "stat": "p90",
-                "liveData": false,
-                "trend": true,
-                "setPeriodToTimeRange": true,
-                "region": "${AWS::Region}"
-              }
-            },
-        {
-            "height": 6,
-            "width": 12,
-            "y": 15,
-            "x": 0,
-            "type": "metric",
-            "properties": {
-                "metrics": [
-                    [ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
-                    [ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ],
-                    [ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
-                    [ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ],
-                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],
-                    [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ]
-                ],
-                "legend": {
-                    "position": "bottom"
-                },
-                "period": 300,
-                "view": "singleValue",
-                "stacked": true,
-                "title": "SQS Metrics",
-                "stat": "Sum",
-                "liveData": true,
-                "sparkline": true,
-                "trend": true,
-                "setPeriodToTimeRange": true,
-                "region": "${AWS::Region}"
+              "widgets": [${Widgets}]
             }
-        },
-        {
-            "height": 6,
-            "width": 12,
-            "y": 15,
-            "x": 12,
-            "type": "metric",
-            "properties": {
-                "view": "timeSeries",
-                "stacked": false,
-                "metrics": [
-                    [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${OCIrawS3Bucket}", { "period": 86400 } ],
-                    [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${DestinationS3Bucket}", { "period": 86400 } ]
-                ],
-                "setPeriodToTimeRange": false,
-                "start": "-PT168H",
-                "end": "PT0H",
-                "region": "${AWS::Region}",
-                "title": "S3 Storage",
-                "yAxis": {
-                    "left": {
-                        "label": "Size(GB)"
-                    }
-                }
-            }
-        },
-            {
-              "type": "log",
-              "width": 24,
-              "height": 9,
-              "x": 0,
-              "y": 5,
-              "properties": {
-                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' | SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' | SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | sort @timestamp desc | limit 300",
-                "region": "${AWS::Region}",
-                "title": "Lambda Trace",
-                "view": "table"
-              }
-            },
-            {
-              "type": "log",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 6,
-              "properties": {
-                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
-                "region": "${AWS::Region}",
-                "title": "CIDOCISyncToS3LambdaFocus Errors",
-                "view": "table"
-              }
-            },
-            {
-              "type": "log",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 7,
-              "properties": {
-                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
-                "region": "${AWS::Region}",
-                "title": "CIDOCISyncToS3LambdaStandard Errors",
-                "view": "table"
-              }
-            },
-            {
-              "type": "log",
-              "width": 24,
-              "height": 3,
-              "x": 0,
-              "y": 8,
-              "properties": {
-                "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
-                "region": "${AWS::Region}",
-                "title": "CIDOCISyncToS3SQSLambdaFunction Errors",
-                "view": "table"
-              }
-            }
-          ]
-        }
+          - Widgets:
+              Fn::Join:
+                - ','
+                - - Fn::Sub: #Widget for Lambda Invocations
+                    - |
+                      {
+                        "type": "metric", 
+                        "width": 24,
+                        "height": 3,
+                        "x": 0,
+                        "y": 0,
+                        "properties": {
+                          "metrics": [
+                            ${StandardExportMetric}
+                            ${FocusExportMetric}
+                            [ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m3" } ]
+
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "period": 300,
+                          "view": "singleValue",
+                          "stacked": true,
+                          "title": "Lambda Invocations",
+                          "stat": "Sum",
+                          "liveData": true,
+                          "sparkline": true,
+                          "trend": true,
+                          "setPeriodToTimeRange": true,
+                          "region": "${AWS::Region}"
+                        }
+                      }
+                    - StandardExportMetric:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub '[ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m4" } ],'
+                          - ''
+                      FocusExportMetric:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub '[ "AWS/Lambda", "Invocations", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m5" } ],'
+                          - ''
+                  - Fn::Sub: #Widget for Lambda Errors
+                    - |
+                      {
+                        "type": "metric",
+                        "width": 24,
+                        "height": 3,
+                        "x": 0,
+                        "y": 3,
+                        "properties": {
+                          "metrics": [
+                            ${StandardErrorMetric}
+                            ${FocusErrorMetric}
+                            [ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m9" } ]
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "period": 300,
+                          "view": "singleValue",
+                          "stacked": false,
+                          "title": "Lambda Errors",
+                          "stat": "Sum",
+                          "liveData": true,
+                          "sparkline": true,
+                          "trend": true,
+                          "setPeriodToTimeRange": true,
+                          "region": "${AWS::Region}"
+                        }
+                      }
+                    - StandardErrorMetric:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub '[ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m7" } ],'
+                          - ''
+                      FocusErrorMetric:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub '[ "AWS/Lambda", "Errors", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m8" } ],'
+                          - ''
+                  - Fn::Sub: #Widget for Lambda Duration
+                    - |
+                      {
+                        "type": "metric",
+                        "width": 24,
+                        "height": 3,
+                        "x": 0,
+                        "y": 2,
+                        "properties": {
+                          "metrics": [
+                            ${StandardDurationMetric}
+                            ${FocusDurationMetric}
+                            [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m15" } ]
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "period": 300,
+                          "view": "singleValue",
+                          "stacked": true,
+                          "title": "Lambda Duration",
+                          "stat": "p90",
+                          "liveData": true,
+                          "sparkline": true,
+                          "trend": true,
+                          "setPeriodToTimeRange": true,
+                          "region": "${AWS::Region}"
+                        }
+                      }
+                    - StandardDurationMetric:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub '[ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m14" } ],'
+                          - ''
+                      FocusDurationMetric:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub '[ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m13" } ],'
+                          - ''
+                  - Fn::Sub: #Widget for Lambda Duration Graph
+                    - |
+                      {
+                        "type": "metric",
+                        "width": 24,
+                        "height": 6,
+                        "x": 0,
+                        "y": 3,
+                        "properties": {
+                          "metrics": [
+                            ${StandardDurationTMetric}
+                            ${FocusDurationTMetric}
+                            [ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3SQSLambdaFunction}", { "id": "m21" } ]
+                          ],
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "period": 86400,
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "title": "Lambda Duration Graph",
+                          "stat": "p90",
+                          "liveData": false,
+                          "trend": true,
+                          "setPeriodToTimeRange": true,
+                          "region": "${AWS::Region}"
+                        }
+                      }
+                    - StandardDurationTMetric:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub '[ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaStandard}", { "id": "m14" } ],'
+                          - ''
+                      FocusDurationTMetric:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub '[ "AWS/Lambda", "Duration", "FunctionName", "${CIDOCISyncToS3LambdaFocus}", { "id": "m13" } ],'
+                          - ''
+                  - Fn::Sub: #Widget for SQS Metrics
+                    - |
+                      {
+                          "height": 6,
+                          "width": 12,
+                          "y": 15,
+                          "x": 0,
+                          "type": "metric",
+                          "properties": {
+                              "metrics": [
+                              ${QueueMessageMetric}
+                              ],
+                              "legend": {
+                                  "position": "bottom"
+                              },
+                              "period": 300,
+                              "view": "singleValue",
+                              "stacked": true,
+                              "title": "SQS Metrics",
+                              "stat": "Sum",
+                              "liveData": true,
+                              "sparkline": true,
+                              "trend": true,
+                              "setPeriodToTimeRange": true,
+                              "region": "${AWS::Region}"
+                          }
+                      }
+                    - QueueMessageMetric:
+                        Fn::If:
+                          - IsAnyExportTypeSelectedYes
+                          - !Sub '[ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ], [ "AWS/SQS", "NumberOfMessagesReceived", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ], [ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ],[ "AWS/SQS", "NumberOfMessagesSent", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ], [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueue.QueueName}", { "region": "${AWS::Region}" } ], [ "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${CidOciFocusSQSQueueDLQ.QueueName}", { "region": "${AWS::Region}" } ]'
+                          - ''
+                  - Fn::Sub: #Widget for S3 Storage
+                    - |
+                      {
+                          "height": 6,
+                          "width": 12,
+                          "y": 15,
+                          "x": 12,
+                          "type": "metric",
+                          "properties": {
+                              "view": "timeSeries",
+                              "stacked": false,
+                              "metrics": [
+                              ${S3StorageMetric}
+                              ],
+                              "setPeriodToTimeRange": false,
+                              "start": "-PT168H",
+                              "end": "PT0H",
+                              "region": "${AWS::Region}",
+                              "title": "S3 Storage",
+                              "yAxis": {
+                                  "left": {
+                                      "label": "Size(GB)"
+                                  }
+                              }
+                          }
+                      }
+                    - S3StorageMetric:
+                        Fn::If:
+                          - IsAnyExportTypeSelectedYes
+                          - !Sub '[ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${OCIrawS3Bucket}", { "period": 86400 } ], [ "AWS/S3", "BucketSizeBytes", "StorageType", "StandardStorage", "BucketName", "${DestinationS3Bucket}", { "period": 86400 } ]'
+                          - ''
+                  - Fn::Sub: #Widget for Lambda Trace
+                    - |
+                      {
+                        "type": "log",
+                        "width": 24,
+                        "height": 9,
+                        "x": 0,
+                        "y": 5,
+                        "properties": {
+                          "query": "${StandardLambdaLogs}  ${FocusLambdaLogs}  SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | sort @timestamp desc | limit 300",
+                          "region": "${AWS::Region}",
+                          "title": "Lambda Trace",
+                          "view": "table"
+                        }
+                      },
+                      ${CIDOCISyncToS3LambdaFocusErrors}
+                      ${CIDOCISyncToS3LambdaStandardErrors}
+                      ${CIDOCISyncToS3SQSLambdaFunctionErrors}                    
+                    - StandardLambdaLogs:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' |
+                          - ''
+                      FocusLambdaLogs:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' |
+                          - ''
+                      CIDOCISyncToS3LambdaFocusErrors:
+                        Fn::If:
+                          - IsOCIFocusExportYes
+                          - !Sub  |
+                                  {
+                                    "type": "log",
+                                    "width": 24,
+                                    "height": 3,
+                                    "x": 0,
+                                    "y": 6,
+                                    "properties": {
+                                      "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaFocus}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                                      "region": "${AWS::Region}",
+                                      "title": "CIDOCISyncToS3LambdaFocus Errors",
+                                      "view": "table"
+                                    }
+                                  },
+                          - ''
+                      CIDOCISyncToS3LambdaStandardErrors:
+                        Fn::If:
+                          - IsOCIStandardExportYes
+                          - !Sub  |
+                                  {
+                                    "type": "log",
+                                    "width": 24,
+                                    "height": 3,
+                                    "x": 0,
+                                    "y": 7,
+                                    "properties": {
+                                      "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3LambdaStandard}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                                      "region": "${AWS::Region}",
+                                      "title": "CIDOCISyncToS3LambdaStandard Errors",
+                                      "view": "table"
+                                    }
+                                  },
+                          - ''
+                      CIDOCISyncToS3SQSLambdaFunctionErrors:
+                        Fn::If:
+                          - IsAnyExportTypeSelectedYes
+                          - !Sub  |
+                                  {
+                                    "type": "log",
+                                    "width": 24,
+                                    "height": 9,
+                                    "x": 0,
+                                    "y": 5,
+                                    "properties": {
+                                      "query": "SOURCE '/aws/lambda/${CIDOCISyncToS3SQSLambdaFunction}' | fields @timestamp, @log, @message | filter @message LIKE /ERROR/ or @message LIKE /Task timed out/ | sort @timestamp desc | limit 10",
+                                      "region": "${AWS::Region}",
+                                      "title": "CIDOCISyncToS3SQSLambdaFunction Errors",
+                                      "view": "table"
+                                      }
+                                  }
+                          - ''
+
+
 
 
 #######################################
