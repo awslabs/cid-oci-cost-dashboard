@@ -1980,104 +1980,232 @@ Resources:
       QueryString: !Sub |
         CREATE OR REPLACE VIEW "focus_consolidation_view" AS 
         SELECT
-            AvailabilityZone,
-            BilledCost,
-            BillingAccountId,
-            BillingAccountName,
-            BillingCurrency,
-            BillingPeriodEnd,
-            BillingPeriodStart,
-            ChargeCategory,
-            ChargeClass,
-            ChargeDescription,
-            ChargeFrequency,
-            ChargePeriodEnd,
-            ChargePeriodStart,
-            CommitmentDiscountCategory,
-            CommitmentDiscountId,
-            CommitmentDiscountName,
-            CommitmentDiscountType,
-            CommitmentDiscountStatus,
-            ConsumedQuantity,
-            ConsumedUnit,
-            ContractedCost,
-            ContractedUnitPrice,
-            EffectiveCost,
-            InvoiceIssuerName,
-            ListCost,
-            ListUnitPrice,
-            PricingCategory,
-            PricingQuantity,
-            PricingUnit,
-            ProviderName,
-            PublisherName,
-            RegionId,
-            RegionName,
-            ResourceId,
-            ResourceName,
-            ResourceType,
-            ServiceCategory,
-            ServiceName,
-            SkuId,
-            SkuPriceId,
-            SubAccountId,
-            SubAccountName,
-            Tags,
-            billing_period
+          AvailabilityZone
+        , BilledCost
+        , BillingAccountId
+        , BillingAccountName
+        , BillingCurrency
+        , BillingPeriodEnd
+        , BillingPeriodStart
+        , ChargeCategory
+        , ChargeClass
+        , ChargeDescription
+        , ChargeFrequency
+        , ChargePeriodEnd
+        , ChargePeriodStart
+        , CommitmentDiscountCategory
+        , CommitmentDiscountId
+        , CommitmentDiscountName
+        , CommitmentDiscountType
+        , CommitmentDiscountStatus
+        , ConsumedQuantity
+        , ConsumedUnit
+        , ContractedCost
+        , ContractedUnitPrice
+        , EffectiveCost
+        , InvoiceIssuerName
+        , ListCost
+        , ListUnitPrice
+        , PricingCategory
+        , PricingQuantity
+        , PricingUnit
+        , ProviderName
+        , PublisherName
+        , RegionId
+        , RegionName
+        , ResourceId
+        , ResourceName
+        , ResourceType
+        , ServiceCategory
+        , ServiceName
+        , SkuId
+        , SkuPriceId
+        , SubAccountId
+        , SubAccountName
+        , Tags
+        , billing_period
         FROM
-            -- Default AWS FOCUS database name and table used below. Change if necessary
-            "cid_data_export"."focus"
-            
-        UNION ALL
+          "cid_data_export"."focus"
+
+        UNION ALL 
 
         SELECT
-            NULL AS AvailabilityZone,
-            BilledCost,
-            BillingAccountId,
-            BillingAccountName,
-            BillingCurrency,
-            BillingPeriodEnd,
-            BillingPeriodStart,
-            ChargeCategory,
-            ChargeClass,
-            ChargeDescription,
-            ChargeFrequency,
-            ChargePeriodEnd,
-            ChargePeriodStart,
-            CommitmentDiscountCategory,
-            CommitmentDiscountId,
-            CommitmentDiscountName,
-            CommitmentDiscountType,
-            CommitmentDiscountStatus,
-            ConsumedQuantity,
-            ConsumedUnit,
-            ContractedCost,
-            ContractedUnitPrice,
-            EffectiveCost,
-            InvoiceIssuerName,
-            ListCost,
-            ListUnitPrice,
-            PricingCategory,
-            PricingQuantity,
-            PricingUnit,
-            ProviderName,
-            PublisherName,
-            RegionId,
-            RegionName,
-            ResourceId,
-            ResourceName,
-            ResourceType,
-            ServiceCategory,
-            ServiceName,
-            SkuId,
-            SkuPriceId,
-            SubAccountId,
-            SubAccountName,
-            Tags,
-            billing_period
+          AvailabilityZone
+        , BilledCost
+        , BillingAccountId
+        , BillingAccountName
+        , BillingCurrency
+        , BillingPeriodEnd
+        , BillingPeriodStart
+        , ChargeCategory
+        , null ChargeClass
+        , ChargeDescription
+        , ChargeFrequency
+        , ChargePeriodEnd
+        , ChargePeriodStart
+        , CommitmentDiscountCategory
+        , CommitmentDiscountId
+        , CommitmentDiscountName
+        , CommitmentDiscountType
+        , null CommitmentDiscountStatus
+        , null ConsumedQuantity
+        , null ConsumedUnit
+        , null ContractedCost
+        , null ContractedUnitPrice
+        , EffectiveCost
+        , invoiceissuer InvoiceIssuerName
+        , ListCost
+        , ListUnitPrice
+        , PricingCategory
+        , PricingQuantity
+        , PricingUnit
+        , provider ProviderName
+        , publisher PublisherName
+        , region RegionId
+        , region RegionName
+        , ResourceId
+        , ResourceName
+        , ResourceType
+        , ServiceCategory
+        , ServiceName
+        , SkuId
+        , SkuPriceId
+        , SubAccountId
+        , SubAccountName
+        , Tags
+        , billing_period
         FROM
             "${CidOciFocusDatabase}"."${CidOciFocusGlueTable}"
 
+  AthenaQueryFOCUSConsolidationCurrencyRatesView:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database: !Ref CidOciFocusDatabase
+      Description: OCI FOCUS export Athena Named Query Consolidation View with Currency Rate Conversion to USD
+      Name: !Sub ${PrefixCode}-consolidation-currency-rates-view-${EnvironmentCode}
+      WorkGroup: !Ref AthenaWorkgroup
+      QueryString: !Sub |
+        CREATE OR REPLACE VIEW "focus_consolidation_view" AS 
+        SELECT
+          AvailabilityZone
+        , BilledCost
+        , BillingAccountId
+        , BillingAccountName
+        , BillingCurrency
+        , BillingPeriodEnd
+        , BillingPeriodStart
+        , ChargeCategory
+        , ChargeClass
+        , ChargeDescription
+        , ChargeFrequency
+        , ChargePeriodEnd
+        , ChargePeriodStart
+        , CommitmentDiscountCategory
+        , CommitmentDiscountId
+        , CommitmentDiscountName
+        , CommitmentDiscountType
+        , CommitmentDiscountStatus
+        , ConsumedQuantity
+        , ConsumedUnit
+        , ContractedCost
+        , ContractedUnitPrice
+        , EffectiveCost
+        , InvoiceIssuerName
+        , ListCost
+        , ListUnitPrice
+        , PricingCategory
+        , PricingQuantity
+        , PricingUnit
+        , ProviderName
+        , PublisherName
+        , RegionId
+        , RegionName
+        , ResourceId
+        , ResourceName
+        , ResourceType
+        , ServiceCategory
+        , ServiceName
+        , SkuId
+        , SkuPriceId
+        , SubAccountId
+        , SubAccountName
+        , Tags
+        , billing_period
+        FROM
+          "cid_data_export"."focus"
+        UNION ALL SELECT
+          AvailabilityZone
+        , (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.BilledCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.BilledCost END) BilledCost
+        , BillingAccountId
+        , BillingAccountName
+        , BillingCurrency
+        , BillingPeriodEnd
+        , BillingPeriodStart
+        , ChargeCategory
+        , null ChargeClass
+        , ChargeDescription
+        , ChargeFrequency
+        , ChargePeriodEnd
+        , ChargePeriodStart
+        , CommitmentDiscountCategory
+        , CommitmentDiscountId
+        , CommitmentDiscountName
+        , CommitmentDiscountType
+        , null CommitmentDiscountStatus
+        , null ConsumedQuantity
+        , null ConsumedUnit
+        , null ContractedCost
+        , null ContractedUnitPrice
+        , (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.EffectiveCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.EffectiveCost END) EffectiveCost
+        , null InvoiceIssuerName
+        , (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.ListCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.ListCost END) ListCost
+        , (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.ListUnitPrice * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.ListUnitPrice END) ListUnitPrice
+        , PricingCategory
+        , PricingQuantity
+        , PricingUnit
+        , provider ProviderName
+        , publisher PublisherName
+        , region RegionId
+        , region RegionName
+        , ResourceId
+        , ResourceName
+        , ResourceType
+        , ServiceCategory
+        , ServiceName
+        , SkuId
+        , SkuPriceId
+        , SubAccountId
+        , SubAccountName
+        , Tags
+        , billing_period
+        FROM
+          ("${CidOciFocusDatabase}"."${CidOciFocusGlueTable}" oci
+        LEFT JOIN "${CidOciFocusDatabase}"."currency_rates" cr ON ((oci.BillingCurrency = cr.CurrencyName) AND (DATE(oci.BillingPeriodStart) = cr.Date)))
+            "${CidOciFocusDatabase}"."${CidOciFocusGlueTable}"
+
+  AthenaQueryCurrencyRatesView:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database: !Ref CidOciFocusDatabase
+      Description: OCI FOCUS export Athena Currency Rates Query (sample)
+      Name: !Sub ${PrefixCode}-currency-rates-table-${EnvironmentCode}
+      WorkGroup: !Ref AthenaWorkgroup
+      QueryString: !Sub |
+        CREATE EXTERNAL TABLE `currency_rates`(
+          `currencyname` string, 
+          `conversiontousdrate` double, 
+          `date` date)
+        ROW FORMAT DELIMITED 
+          FIELDS TERMINATED BY ',' 
+        STORED AS INPUTFORMAT 
+          'org.apache.hadoop.mapred.TextInputFormat' 
+        OUTPUTFORMAT 
+          'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+        LOCATION
+          's3://${ArtifactBucket}/rates'
+        TBLPROPERTIES (
+          'skip.header.line.count'='1', 
+          'transient_lastDdlTime'='1743578022')
 
   QuickSightRolePolicy:
     Type: 'AWS::IAM::RolePolicy'

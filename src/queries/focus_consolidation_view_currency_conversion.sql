@@ -46,12 +46,9 @@ SELECT
 , billing_period
 FROM
   "cid_data_export"."focus"
-
-UNION ALL 
-
-SELECT
+UNION ALL SELECT
   AvailabilityZone
-, BilledCost
+, (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.BilledCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.BilledCost END) BilledCost
 , BillingAccountId
 , BillingAccountName
 , BillingCurrency
@@ -72,10 +69,10 @@ SELECT
 , null ConsumedUnit
 , null ContractedCost
 , null ContractedUnitPrice
-, EffectiveCost
-, invoiceissuer InvoiceIssuerName
-, ListCost
-, ListUnitPrice
+, (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.EffectiveCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.EffectiveCost END) EffectiveCost
+, null InvoiceIssuerName
+, (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.ListCost * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.ListCost END) ListCost
+, (CASE WHEN (oci.BillingCurrency <> 'USD') THEN (oci.ListUnitPrice * COALESCE(cr.ConversionToUSDRate, 1)) ELSE oci.ListUnitPrice END) ListUnitPrice
 , PricingCategory
 , PricingQuantity
 , PricingUnit
@@ -95,4 +92,5 @@ SELECT
 , Tags
 , billing_period
 FROM
-  "cid_oci_data_export_ws"."focus-oci"
+  ("cid_oci_data_export_ws"."focus-oci" oci
+LEFT JOIN "cid_oci_focus_data_export_ck1"."currency_rates" cr ON ((oci.BillingCurrency = cr.CurrencyName) AND (DATE(oci.BillingPeriodStart) = cr.Date)))
